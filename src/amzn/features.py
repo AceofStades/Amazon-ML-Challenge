@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import argparse
+from pathlib import Path
+
 import duckdb
+
+from .blocking import connect
 
 
 FEATURE_NAMES = (
@@ -113,3 +118,21 @@ def create_features(
     """)
     count = connection.execute(f"SELECT count(*) FROM {output}").fetchone()[0]
     print(f"{output}: {count:,} scored pairs", flush=True)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--database", type=Path, default=Path("cache/resolution.duckdb"))
+    parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
+    parser.add_argument("--split", choices=("train", "test"), required=True)
+    parser.add_argument("--candidates", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--include-seed-features", action="store_true")
+    args = parser.parse_args()
+    connection = connect(args.database, args.cache_dir)
+    create_features(connection, args.split, args.candidates, args.output,
+                    args.include_seed_features)
+
+
+if __name__ == "__main__":
+    main()

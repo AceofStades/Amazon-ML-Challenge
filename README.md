@@ -1,43 +1,45 @@
 # Business entity resolution pipeline
 
-This project links every Source 1 test record to zero or more Source 2 and Source 3 records. It writes the two TSV files required by the ML Challenge. No external business data or lookup service is used.
+This pipeline links every Source 1 test record to zero or more Source 2 and Source 3 records, using only the supplied challenge TSVs. No external identity data or lookup service is used.
 
-## Environment and data
+Use Python 3.12 with uv. Training and prediction use an NVIDIA GPU through XGBoost; normalization and blocking use CPU cores and DuckDB. Place the supplied TSV files under dataset/train/ and dataset/test/ with their original names. Run all commands from this directory. The dataset/, cache/, and output/ directories are ignored by Git.
 
-- Python 3.12, managed with `uv` (`.python-version`, `pyproject.toml`, and `uv.lock`).
-- Training uses an NVIDIA GPU through XGBoost. Preprocessing and blocking use CPU cores and DuckDB.
-- Put the supplied files in `dataset/train/` and `dataset/test/`, using the original `train_source1.tsv` through `train_source3.tsv`, `train_ground_truth.tsv`, and `test_source1.tsv` through `test_source3.tsv` names. The dataset is ignored by Git.
-- Run commands from the project root. The local `cache/` and `output/` directories are ignored by Git.
-
-```bash
+~~~bash
 uv sync --python 3.12
 uv run python -m amzn.prepare --workers 6
-uv run python -m amzn.blocking --split train --import-records --index-targets
-uv run python -m amzn.blocking --split train --candidates --sample-per-thousand 60 --max-candidates 30
-uv run python -m amzn.evaluate_blocking
-uv run python -m amzn.train
-uv run python -m amzn.blocking --split test --import-records --index-targets
-uv run python -m amzn.blocking --split test --candidates --max-candidates 10
-uv run python -m amzn.infer
-uv run python src/utils_validate_submission.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids
-```
 
-`output/matching_results.tsv` is the leaderboard upload. `output/candidate_pairs.tsv` contains the exact candidate set scored by the model. Both files include one row for every test Source 1 entity, including records with no candidates or matches. `output/pair_model.json` and `output/training_metrics.json` are reproducibility artifacts.
+# First-pass training blocker and GPU matcher.
+uv run python -m amzn.blocking --split train --import-records --index-targets --candidates --sample-per-thousand 60 --max-candidates 30
+uv run python -m amzn.evaluate_blocking
+uv run python -m amzn.train --output-dir output/stage1 --rounds 850
+
+# Expand around high-confidence first-pass matches, then train the final matcher.
+uv run python -m amzn.seeds --model-dir output/stage1 --feature-table train_sample_features --output-table train_sample_seeds --threshold 0.9
+uv run python -m amzn.blocking --split train --expand --seeds-table train_sample_seeds --base-table train_sample_candidates --output-table train_sample_expanded_candidates --max-candidates 30
+uv run python -m amzn.blocking --split train --combine --base-table train_sample_candidates --expanded-table train_sample_expanded_candidates --output-table train_sample_combined_candidates
+uv run python -m amzn.train --candidate-table train_sample_combined_candidates --feature-table train_sample_combined_features --output-dir output/stage2 --rounds 900
+
+# Apply both stages to every test entity.
+uv run python -m amzn.blocking --split test --import-records --index-targets --candidates --max-candidates 30
+uv run python -m amzn.features --split test --candidates test_candidates --output test_features
+uv run python -m amzn.seeds --model-dir output/stage1 --feature-table test_features --output-table test_seeds --threshold 0.9
+uv run python -m amzn.blocking --split test --expand --seeds-table test_seeds --base-table test_candidates --output-table test_expanded_candidates --max-candidates 30
+uv run python -m amzn.blocking --split test --combine --base-table test_candidates --expanded-table test_expanded_candidates --output-table test_combined_candidates
+uv run python -m amzn.infer --model-dir output/stage2 --candidate-table test_combined_candidates --feature-table test_combined_features
+uv run python src/utils_validate_submission.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids
+uv run python -m amzn.package --team-name "Claude's Plan"
+~~~
+
+The leaderboard upload is output/matching_results.tsv. The output/candidate_pairs.tsv file contains exactly the pairs scored by the final matcher. Both files have one row per test Source 1 entity, including entities with empty lists. The ZIP contains both outputs, source code, both model artifacts, pinned dependencies, and the methodology document.
 
 ## Method
 
-`amzn.prepare` streams all source files, transliterates non-ASCII text, standardizes common address terms, and derives canonical name, address, house-number, and token-anchor fields. Country remains an open string label. No US/India-only rule excludes France.
+The prepare step streams and normalizes the supplied records: case folding, Unicode transliteration, punctuation cleanup, common address abbreviations, sorted canonical fields, house number, and name/address token anchors. Country remains an open string label; France is included automatically.
 
-`amzn.blocking` creates exact-name, exact-address, name/address token, house/name token, and house/address token keys. It removes keys with large target posting lists, joins remaining keys in DuckDB, then ranks candidate pairs by inexpensive name and address similarities. The final cap is applied before model features and predictions. The candidate TSV therefore reflects exactly what the classifier receives.
+The first blocking pass uses exact name/address, rare token, token-pair, and name-prefix/address keys. Keys with large target posting lists are dropped. It ranks remaining pairs by name/address Jaro-Winkler similarity and blocking evidence, keeping at most 30 per Source 1 entity.
 
-`amzn.features` computes 18 pairwise features in DuckDB. `amzn.train` fits an XGBoost binary classifier on a deterministic 5% Source 1 training sample and tunes threshold and candidate cap on a disjoint 1% sample. Validation uses the challenge's macro F0.5 definition, including singleton records. The current run selected 10 candidates per Source 1 and threshold 0.575. Validation macro F0.5 is 0.884862 on 22,144 held-out Source 1 records. Candidate recall at 10 is 0.869125 on the combined 6% sample.
+The first GPU XGBoost classifier scores those pairs. Predictions above 0.9 become precise seeds for a second candidate pass. For each seed, the blocker finds other target records sharing a rare key (posting list at most 40), ranks them by similarity to both the seed and the Source 1 record, and keeps at most 30 additional pairs. The final classifier scores the union. In the 6% deterministic training sample, this raises pair-level candidate recall from 0.893211 to 0.924587 while averaging 53.25 candidates per Source 1 record.
 
-`amzn.infer` scores every final test candidate and writes both TSV files. The supplied validator checks file structure, membership, and the match-subset-of-candidates rule. Source code and lockfile are sufficient to rebuild the outputs from the supplied TSV data.
+The feature step computes 27 numeric features, including canonical and raw string similarities, character bigram and token Jaccard, edit similarity, house and address-number agreement, missingness, source, and blocking evidence. The final XGBoost 3.4.1 model (Apache-2.0 license) uses GPU histogram training. About 5% of training Source 1 entities fit each model; a disjoint 1% tunes the threshold and cap against the challenge's macro F0.5 metric, including singletons. The selected cap is 60 and threshold is 0.65. Held-out macro F0.5 is 0.924402 on 22,144 entities. The test set includes an unseen country, so leaderboard results may differ from this holdout.
 
-## Validation
-
-```bash
-uv run python -m unittest discover -s src/tests -v
-```
-
-The blocking test checks transliteration, misspelled names, cross-country exclusion, and empty output rows.
+Run uv run python -m unittest discover -s src/tests -v for the integration test. The supplied validator checks both output files and every referenced test ID.

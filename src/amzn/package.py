@@ -22,6 +22,10 @@ def build_package(root: Path, team_name: str) -> Path:
         root / "uv.lock",
         root / ".python-version",
         root / "Documentation_template.md",
+        output / "stage1" / "pair_model.json",
+        output / "stage1" / "training_metrics.json",
+        output / "stage2" / "pair_model.json",
+        output / "stage2" / "training_metrics.json",
     ]
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
@@ -35,10 +39,9 @@ def build_package(root: Path, team_name: str) -> Path:
             bundle.write(root / name, f"{code_root}/{name}")
         for path in sorted((root / "src").rglob("*.py")):
             bundle.write(path, f"{code_root}/src/{path.relative_to(root / 'src')}")
-        for name in ("pair_model.json", "training_metrics.json"):
-            path = output / name
-            if path.is_file():
-                bundle.write(path, f"{code_root}/model/{name}")
+        for stage in ("stage1", "stage2"):
+            for name in ("pair_model.json", "training_metrics.json"):
+                bundle.write(output / stage / name, f"{code_root}/model/{stage}/{name}")
         bundle.write(root / "Documentation_template.md", "Documentation_template.md")
     return archive
 
