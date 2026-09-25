@@ -1,0 +1,9 @@
+duckdb==1.5.5
+numpy==2.5.3
+nvidia-nccl-cu13==2.32.3 ; sys_platform == 'linux'
+polars==1.44.2
+polars-runtime-32==1.44.2
+rapidfuzz==3.14.6
+scipy==1.18.1
+unidecode==1.4.0
+xgboost==3.4.1

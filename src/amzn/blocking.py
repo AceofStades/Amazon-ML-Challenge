@@ -51,6 +51,9 @@ def key_query(records: str) -> str:
             (CASE WHEN r.name_anchor1 <> '' AND r.address_anchor2 <> '' THEN 'NA|' || r.country || '|' || r.name_anchor1 || '|' || r.address_anchor2 END, 72, 300),
             (CASE WHEN r.name_anchor2 <> '' AND r.address_anchor1 <> '' THEN 'NA|' || r.country || '|' || r.name_anchor2 || '|' || r.address_anchor1 END, 70, 300),
             (CASE WHEN r.name_anchor2 <> '' AND r.address_anchor2 <> '' THEN 'NA|' || r.country || '|' || r.name_anchor2 || '|' || r.address_anchor2 END, 68, 300),
+            (CASE WHEN r.house <> '' AND r.address_anchor1 <> '' THEN 'HA|' || r.country || '|' || r.house || '|' || r.address_anchor1 END, 85, 120),
+            (CASE WHEN r.house <> '' AND r.address_anchor2 <> '' THEN 'HA|' || r.country || '|' || r.house || '|' || r.address_anchor2 END, 83, 120),
+            (CASE WHEN r.address_anchor1 <> '' AND r.address_anchor2 <> '' THEN 'AA|' || r.country || '|' || r.address_anchor1 || '|' || r.address_anchor2 END, 65, 200),
             (CASE WHEN r.house <> '' AND r.name_anchor1 <> '' THEN 'HN|' || r.country || '|' || r.house || '|' || r.name_anchor1 END, 60, 200),
             (CASE WHEN r.house <> '' AND r.name_anchor2 <> '' THEN 'HN|' || r.country || '|' || r.house || '|' || r.name_anchor2 END, 58, 200),
             (CASE WHEN r.name_anchor1 <> '' THEN 'T|' || r.country || '|' || r.name_anchor1 END, 30, 60),
@@ -113,7 +116,8 @@ def generate_candidates(
                    jaro_winkler_similarity(s.name, t.name) AS name_jw,
                    CASE WHEN s.address <> '' AND t.address <> ''
                         THEN jaro_winkler_similarity(s.address, t.address)
-                        ELSE 0 END AS address_jw
+                        ELSE 0 END AS address_jw,
+                   coalesce((s.house <> '' AND s.house = t.house)::INT, 0) AS house_equal
             FROM hits h
             JOIN source_records s ON h.source1_entity_id = s.entity_id
             JOIN {split}_targets t ON h.candidate_entity_id = t.entity_id
@@ -121,7 +125,8 @@ def generate_candidates(
         ranked AS (
             SELECT *, row_number() OVER (
                 PARTITION BY source1_entity_id
-                ORDER BY block_weight + 40 * name_jw + 20 * address_jw DESC,
+                ORDER BY 70 * coalesce(name_jw, 0) + 60 * address_jw + 0.2 * block_weight
+                         + 12 * house_equal + 3 * matching_keys DESC,
                          matching_keys DESC, candidate_entity_id
             ) AS candidate_rank
             FROM scored

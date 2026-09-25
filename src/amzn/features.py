@@ -50,8 +50,8 @@ def create_features(
                 greatest(length(s.name), length(t.name), 1)) AS name_length_ratio,
                (least(length(s.address), length(t.address))::FLOAT /
                 greatest(length(s.address), length(t.address), 1)) AS address_length_ratio,
-               (s.name = '' OR t.name = '')::INT::FLOAT AS name_missing,
-               (s.address = '' OR t.address = '')::INT::FLOAT AS address_missing,
+               (s.name IS NULL OR s.name = '' OR t.name IS NULL OR t.name = '')::INT::FLOAT AS name_missing,
+               (s.address IS NULL OR s.address = '' OR t.address IS NULL OR t.address = '')::INT::FLOAT AS address_missing,
                starts_with(t.entity_id, 'S3-')::INT::FLOAT AS target_is_source3
         FROM {candidates} c
         JOIN {split}_source1 s ON c.source1_entity_id = s.entity_id

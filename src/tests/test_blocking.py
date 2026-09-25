@@ -5,6 +5,7 @@ from pathlib import Path
 
 from amzn.blocking import connect, generate_candidates, import_split, index_targets
 from amzn.features import create_features
+from amzn.infer import write_grouped_output
 from amzn.normalize import RECORD_COLUMNS, normalize_record
 
 
@@ -16,6 +17,7 @@ class BlockingTest(unittest.TestCase):
                 1: [
                     ("S1-1", "Raj Investments LLP", "6(29) C.I.T. Colony, Chennai", "India"),
                     ("S1-2", "Payne Enterprises", "3315 Fremont Street, Peoria", "US"),
+                    ("S1-3", "Lumiere", "1 Rue Paris", "France"),
                 ],
                 2: [
                     ("S2-1", "राज इन्वेस्टमेंट्स एलएलपी", "6(29) C.I.T. Colony, Chennai", "India"),
@@ -46,6 +48,18 @@ class BlockingTest(unittest.TestCase):
             self.assertIn(("S1-1", "S2-1"), pairs)
             self.assertIn(("S1-2", "S2-2"), pairs)
             self.assertNotIn(("S1-1", "S3-1"), pairs)
+
+            connection.execute("CREATE TABLE test_source1 AS SELECT * FROM train_source1")
+            connection.execute("CREATE TABLE test_features AS SELECT * FROM pair_features")
+            output = cache / "candidate_pairs.tsv"
+            write_grouped_output(
+                connection, "test_features", "candidate_entity_id", output,
+                "candidate_entity_ids",
+            )
+            text = output.read_text()
+            self.assertIn("S1-1\tS2-1\n", text)
+            self.assertIn("S1-3\t\n", text)
+            self.assertNotIn('""', text)
 
 
 if __name__ == "__main__":
