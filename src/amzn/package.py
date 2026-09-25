@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 
 def build_package(root: Path, team_name: str) -> Path:
-    slug = re.sub(r"[^a-z0-9]+", "_", team_name.lower()).strip("_")
+    slug = re.sub(r"[^a-z0-9]+", "_", team_name.lower().replace("'", "").replace("’", "")).strip("_")
     if not slug:
         raise ValueError("Team name must contain letters or numbers")
     output = root / "output"

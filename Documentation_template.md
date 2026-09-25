@@ -1,7 +1,9 @@
 # ML Challenge 2026: Business Entity Resolution Solution
 
-**Team Name:** Team HMM (working name)  
-**Team Members:** To be supplied by team  
+**Team Name:** Claude's Plan
+
+**Team Members:** Rahul Bokade (leader), Hrishita Chavan, Riddhesh Budha, Umed Indulkar
+
 **Submission Date:** 2026-09-26
 
 ## 1. Executive Summary
