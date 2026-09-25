@@ -69,9 +69,6 @@ def build_candidates(args: argparse.Namespace) -> None:
                    coalesce(b.matching_keys, 0) AS matching_keys,
                    b.name_jw, b.address_jw,
                    coalesce(b.candidate_rank, 200) AS candidate_rank,
-                   coalesce(b.seed_score, 0) AS seed_score,
-                   coalesce(b.seed_name_jw, 0) AS seed_name_jw,
-                   coalesce(b.seed_address_jw, 0) AS seed_address_jw,
                    (b.source1_entity_id IS NOT NULL)::INT AS in_keys,
                    (k.source1_entity_id IS NOT NULL)::INT AS in_knn
             FROM b FULL OUTER JOIN k
@@ -158,7 +155,7 @@ def build_features(args: argparse.Namespace) -> None:
     features = f"{args.split}_v3_features"
     if not args.reuse_features:
         started = time.time()
-        create_features(connection, args.split, candidates, features, include_seed_features=True)
+        create_features(connection, args.split, candidates, features)
         connection.execute(f"""
             CREATE OR REPLACE TABLE {features} AS
             SELECT f.*, c.in_keys::FLOAT AS in_keys, c.in_knn::FLOAT AS in_knn
@@ -226,8 +223,8 @@ def main() -> None:
     parser.add_argument("--reuse-features", action="store_true")
     args = parser.parse_args()
     if args.base_table is None:
-        args.base_table = ("train_sample_combined_candidates" if args.split == "train"
-                           else "test_combined_candidates")
+        args.base_table = ("train_sample_candidates" if args.split == "train"
+                           else "test_candidates")
     {"candidates": build_candidates, "features": build_features}[args.command](args)
 
 
