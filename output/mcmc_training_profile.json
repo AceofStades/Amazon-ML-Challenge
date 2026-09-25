@@ -1,0 +1,16 @@
+{
+  "python": "3.12",
+  "rows": {
+    "source1": 2206821,
+    "source2": 5034616,
+    "source3": 5285603
+  },
+  "mcmc_iterations_per_field": 1500,
+  "burn_in": 300,
+  "profile": {
+    "business_name_normalized": 0.037131719161973685,
+    "business_address_normalized": 0.0371306309112401,
+    "country_normalized": 0.513681256185286
+  },
+  "elapsed_seconds": 121.616
+}
