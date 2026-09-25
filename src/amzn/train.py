@@ -71,12 +71,17 @@ def train(
     validation_end: int = 60,
     rounds: int = 500,
     include_seed_features: bool = False,
+    reuse_features: bool = False,
+    max_depth: int = 8,
+    eta: float = 0.07,
+    min_child_weight: float = 5,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     connection = connect(database, cache_dir)
     names = SECOND_STAGE_FEATURE_NAMES if include_seed_features else FEATURE_NAMES
-    create_features(connection, "train", candidate_table, feature_table,
-                    include_seed_features=include_seed_features)
+    if not reuse_features:
+        create_features(connection, "train", candidate_table, feature_table,
+                        include_seed_features=include_seed_features)
     fields = ", ".join(names)
     query = (
         f"SELECT source1_entity_id, candidate_entity_id, {fields}, "
@@ -112,8 +117,8 @@ def train(
     model = xgb.train(
         {
             "objective": "binary:logistic", "eval_metric": "aucpr", "tree_method": "hist",
-            "device": "cuda", "max_depth": 8, "eta": 0.07, "subsample": 0.85,
-            "colsample_bytree": 0.9, "min_child_weight": 5, "max_bin": 256,
+            "device": "cuda", "max_depth": max_depth, "eta": eta, "subsample": 0.85,
+            "colsample_bytree": 0.9, "min_child_weight": min_child_weight, "max_bin": 256,
             "nthread": 16, "seed": 42,
         },
         training, num_boost_round=rounds, evals=[(validation, "validation")],
@@ -153,6 +158,7 @@ def train(
         "validation_entities": len(validation_ids),
         "training_pairs": int(train_mask.sum()), "validation_pairs": int(validation_mask.sum()),
         "training_positives": int(labels[train_mask].sum()),
+        "max_depth": max_depth, "eta": eta, "min_child_weight": min_child_weight,
     }
     (output_dir / "training_metrics.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2), flush=True)
@@ -169,10 +175,16 @@ def main() -> None:
     parser.add_argument("--candidate-table", default="train_sample_candidates")
     parser.add_argument("--feature-table", default="train_sample_features")
     parser.add_argument("--include-seed-features", action="store_true")
+    parser.add_argument("--reuse-features", action="store_true")
+    parser.add_argument("--max-depth", type=int, default=8)
+    parser.add_argument("--eta", type=float, default=0.07)
+    parser.add_argument("--min-child-weight", type=float, default=5)
     args = parser.parse_args()
     train(args.database, args.cache_dir, args.truth, args.output_dir,
           candidate_table=args.candidate_table, feature_table=args.feature_table,
-          rounds=args.rounds, include_seed_features=args.include_seed_features)
+          rounds=args.rounds, include_seed_features=args.include_seed_features,
+          reuse_features=args.reuse_features, max_depth=args.max_depth,
+          eta=args.eta, min_child_weight=args.min_child_weight)
 
 
 if __name__ == "__main__":

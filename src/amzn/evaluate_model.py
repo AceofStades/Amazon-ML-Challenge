@@ -11,7 +11,6 @@ import duckdb
 import numpy as np
 import xgboost as xgb
 
-from .features import FEATURE_NAMES
 from .train import dense_features, macro_f05, truth_for_ids
 
 
@@ -20,8 +19,10 @@ def main() -> None:
     parser.add_argument("--database", type=Path, default=Path("cache/resolution.duckdb"))
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
+    parser.add_argument("--feature-table", default="train_sample_features")
     args = parser.parse_args()
     metadata = json.loads((args.output_dir / "training_metrics.json").read_text())
+    names = tuple(metadata["features"])
     cap = int(metadata["candidate_cap"])
     threshold = float(metadata["threshold"])
     connection = duckdb.connect(str(args.database), read_only=True)
@@ -31,20 +32,21 @@ def main() -> None:
         ).fetchall()
     }
     truth = truth_for_ids(args.truth, validation_ids)
-    fields = ", ".join(FEATURE_NAMES)
+    assert args.feature_table.replace("_", "").isalnum()
+    fields = ", ".join(names)
     data = connection.execute(f"""
         SELECT source1_entity_id, candidate_entity_id, {fields}
-        FROM train_sample_features
+        FROM {args.feature_table}
         WHERE hash(source1_entity_id) % 1000 BETWEEN 50 AND 59
           AND candidate_rank <= {cap}
     """).fetchnumpy()
     sources = data["source1_entity_id"].tolist()
     targets = data["candidate_entity_id"].tolist()
-    X = dense_features(data)
+    X = dense_features(data, names)
     model = xgb.Booster()
     model.load_model(args.output_dir / "pair_model.json")
     probabilities = model.predict(
-        xgb.DMatrix(X, feature_names=list(FEATURE_NAMES)),
+        xgb.DMatrix(X, feature_names=list(names)),
         iteration_range=(0, int(metadata["best_iteration"]) + 1),
     )
     predictions: dict[str, set[str]] = defaultdict(set)
@@ -71,7 +73,7 @@ def main() -> None:
         "correct_singletons": correct_singletons,
         "singleton_accuracy": correct_singletons / len(singletons) if singletons else None,
         "macro_f05": macro_f05(
-            sources, targets, probabilities, X[:, FEATURE_NAMES.index("candidate_rank")],
+            sources, targets, probabilities, X[:, names.index("candidate_rank")],
             truth, validation_ids, threshold, cap,
         ),
     }
