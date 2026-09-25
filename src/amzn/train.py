@@ -133,8 +133,7 @@ def train(
         best_threshold, best_score = max(scored, key=lambda item: item[1])
         by_cap[cap] = {"threshold": best_threshold, "macro_f05": best_score}
         print(f"Candidate cap {cap}: macro F0.5={best_score:.6f} at {best_threshold:.3f}", flush=True)
-    best_score = max(item["macro_f05"] for item in by_cap.values())
-    selected_cap = min(cap for cap, item in by_cap.items() if item["macro_f05"] >= best_score - 0.005)
+    selected_cap = max(by_cap, key=lambda cap: by_cap[cap]["macro_f05"])
     threshold = by_cap[selected_cap]["threshold"]
     score = by_cap[selected_cap]["macro_f05"]
     model_path = output_dir / "pair_model.json"

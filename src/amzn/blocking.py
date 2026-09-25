@@ -46,11 +46,23 @@ def key_query(records: str) -> str:
         FROM {records} r
         CROSS JOIN LATERAL (VALUES
             (CASE WHEN r.name_core <> '' THEN 'N|' || r.country || '|' || r.name_core END, 100, 500),
+            (CASE WHEN r.name_anchor1 <> '' AND r.name_anchor2 <> ''
+                  THEN 'NN|' || r.country || '|' || least(r.name_anchor1, r.name_anchor2) || '|' || greatest(r.name_anchor1, r.name_anchor2) END, 90, 1000),
+            (CASE WHEN length(r.name_anchor1) >= 4 AND length(r.name_anchor2) >= 4
+                  THEN 'NNP|' || r.country || '|' || least(left(r.name_anchor1, 4), left(r.name_anchor2, 4)) || '|' || greatest(left(r.name_anchor1, 4), left(r.name_anchor2, 4)) END, 70, 300),
             (CASE WHEN r.address_core <> '' THEN 'A|' || r.country || '|' || r.address_core END, 95, 300),
             (CASE WHEN r.name_anchor1 <> '' AND r.address_anchor1 <> '' THEN 'NA|' || r.country || '|' || r.name_anchor1 || '|' || r.address_anchor1 END, 75, 300),
             (CASE WHEN r.name_anchor1 <> '' AND r.address_anchor2 <> '' THEN 'NA|' || r.country || '|' || r.name_anchor1 || '|' || r.address_anchor2 END, 72, 300),
             (CASE WHEN r.name_anchor2 <> '' AND r.address_anchor1 <> '' THEN 'NA|' || r.country || '|' || r.name_anchor2 || '|' || r.address_anchor1 END, 70, 300),
             (CASE WHEN r.name_anchor2 <> '' AND r.address_anchor2 <> '' THEN 'NA|' || r.country || '|' || r.name_anchor2 || '|' || r.address_anchor2 END, 68, 300),
+            (CASE WHEN length(r.name_anchor1) >= 4 AND r.address_anchor1 <> '' THEN 'NPA|' || r.country || '|' || left(r.name_anchor1, 4) || '|' || r.address_anchor1 END, 60, 300),
+            (CASE WHEN length(r.name_anchor1) >= 4 AND r.address_anchor2 <> '' THEN 'NPA|' || r.country || '|' || left(r.name_anchor1, 4) || '|' || r.address_anchor2 END, 58, 300),
+            (CASE WHEN length(r.name_anchor2) >= 4 AND r.address_anchor1 <> '' THEN 'NPA|' || r.country || '|' || left(r.name_anchor2, 4) || '|' || r.address_anchor1 END, 56, 300),
+            (CASE WHEN length(r.name_anchor2) >= 4 AND r.address_anchor2 <> '' THEN 'NPA|' || r.country || '|' || left(r.name_anchor2, 4) || '|' || r.address_anchor2 END, 54, 300),
+            (CASE WHEN r.name_anchor1 <> '' AND length(r.address_anchor1) >= 4 THEN 'APA|' || r.country || '|' || r.name_anchor1 || '|' || left(r.address_anchor1, 4) END, 52, 300),
+            (CASE WHEN r.name_anchor1 <> '' AND length(r.address_anchor2) >= 4 THEN 'APA|' || r.country || '|' || r.name_anchor1 || '|' || left(r.address_anchor2, 4) END, 50, 300),
+            (CASE WHEN r.name_anchor2 <> '' AND length(r.address_anchor1) >= 4 THEN 'APA|' || r.country || '|' || r.name_anchor2 || '|' || left(r.address_anchor1, 4) END, 48, 300),
+            (CASE WHEN r.name_anchor2 <> '' AND length(r.address_anchor2) >= 4 THEN 'APA|' || r.country || '|' || r.name_anchor2 || '|' || left(r.address_anchor2, 4) END, 46, 300),
             (CASE WHEN r.house <> '' AND r.address_anchor1 <> '' THEN 'HA|' || r.country || '|' || r.house || '|' || r.address_anchor1 END, 85, 120),
             (CASE WHEN r.house <> '' AND r.address_anchor2 <> '' THEN 'HA|' || r.country || '|' || r.house || '|' || r.address_anchor2 END, 83, 120),
             (CASE WHEN r.address_anchor1 <> '' AND r.address_anchor2 <> '' THEN 'AA|' || r.country || '|' || r.address_anchor1 || '|' || r.address_anchor2 END, 65, 200),
