@@ -20,10 +20,10 @@ uv run python -m amzn.blocking --split train --combine --base-table train_sample
 uv run python -m amzn.train --candidate-table train_sample_combined_candidates --feature-table train_sample_combined_features --output-dir output/stage2 --rounds 900
 
 # Apply both stages to every test entity.
-uv run python -m amzn.blocking --split test --import-records --index-targets --candidates --max-candidates 30
+uv run python -m amzn.blocking --split test --import-records --index-targets --candidates --max-candidates 30 --partitions 16
 uv run python -m amzn.features --split test --candidates test_candidates --output test_features
 uv run python -m amzn.seeds --model-dir output/stage1 --feature-table test_features --output-table test_seeds --threshold 0.9
-uv run python -m amzn.blocking --split test --expand --seeds-table test_seeds --base-table test_candidates --output-table test_expanded_candidates --max-candidates 30
+uv run python -m amzn.blocking --split test --expand --seeds-table test_seeds --base-table test_candidates --output-table test_expanded_candidates --max-candidates 30 --partitions 16
 uv run python -m amzn.blocking --split test --combine --base-table test_candidates --expanded-table test_expanded_candidates --output-table test_combined_candidates
 uv run python -m amzn.infer --model-dir output/stage2 --candidate-table test_combined_candidates --feature-table test_combined_features
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids

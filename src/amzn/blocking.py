@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
+import sys
 from pathlib import Path
 
 import duckdb
@@ -160,6 +162,7 @@ def expand_candidates(
     max_candidates: int = 30,
     max_key_frequency: int = 40,
     base_cap: int = 30,
+    source_filter: str = "TRUE",
 ) -> None:
     """Retrieve near neighbors of confident target matches as extra candidates."""
     assert split in {"train", "test"}
@@ -176,7 +179,7 @@ def expand_candidates(
             FROM {seeds_table} s
             JOIN {split}_target_keys k ON s.seed_id = k.entity_id
             JOIN {split}_target_key_frequencies f ON k.key = f.key
-            WHERE f.frequency <= {int(max_key_frequency)}
+            WHERE f.frequency <= {int(max_key_frequency)} AND ({source_filter})
         ),
         hits AS (
             SELECT sk.source1_entity_id, sk.seed_id,
@@ -268,6 +271,10 @@ def main() -> None:
     parser.add_argument("--candidates", action="store_true")
     parser.add_argument("--sample-per-thousand", type=int, default=0)
     parser.add_argument("--max-candidates", type=int, default=30)
+    parser.add_argument("--partitions", type=int, default=1,
+                        help="Partition Source 1 joins to bound temporary disk use")
+    parser.add_argument("--partition-index", type=int)
+    parser.add_argument("--start-partition", type=int, default=0)
     parser.add_argument("--expand", action="store_true")
     parser.add_argument("--combine", action="store_true")
     parser.add_argument("--expanded-table")
@@ -286,12 +293,87 @@ def main() -> None:
         sample = args.sample_per_thousand
         source_filter = f"hash(entity_id) % 1000 < {sample}" if sample else "TRUE"
         table = f"{args.split}_sample_candidates" if sample else f"{args.split}_candidates"
-        generate_candidates(connection, args.split, table, source_filter, args.max_candidates)
+        if args.partitions < 1:
+            parser.error("--partitions must be positive")
+        if args.partitions == 1:
+            generate_candidates(connection, args.split, table, source_filter, args.max_candidates)
+        else:
+            staging = f"{table}_staging"
+            if args.partition_index is None:
+                connection.close()
+                for part in range(args.start_partition, args.partitions):
+                    subprocess.run([
+                        sys.executable, "-m", "amzn.blocking", "--split", args.split,
+                        "--candidates", "--sample-per-thousand", str(sample),
+                        "--max-candidates", str(args.max_candidates),
+                        "--cache-dir", str(args.cache_dir),
+                        "--threads", str(args.threads),
+                        "--partitions", str(args.partitions),
+                        "--partition-index", str(part),
+                    ], check=True)
+                connection = connect(args.cache_dir / "resolution.duckdb", args.cache_dir,
+                                     args.threads)
+                connection.execute(f"DROP TABLE IF EXISTS {table}")
+                connection.execute(f"ALTER TABLE {staging} RENAME TO {table}")
+                print(f"{table}: {connection.execute(f'SELECT count(*) FROM {table}').fetchone()[0]:,} total pairs", flush=True)
+            else:
+                part = args.partition_index
+                if not 0 <= part < args.partitions:
+                    parser.error("--partition-index is outside --partitions")
+                part_table = f"{table}_part"
+                part_filter = f"({source_filter}) AND hash(entity_id) % {args.partitions} = {part}"
+                print(f"Candidate partition {part + 1}/{args.partitions}", flush=True)
+                generate_candidates(connection, args.split, part_table, part_filter,
+                                    args.max_candidates)
+                if part == 0:
+                    connection.execute(f"CREATE OR REPLACE TABLE {staging} AS SELECT * FROM {part_table}")
+                else:
+                    connection.execute(f"INSERT INTO {staging} SELECT * FROM {part_table}")
+                connection.execute(f"DROP TABLE {part_table}")
     if args.expand:
         if not all((args.seeds_table, args.base_table, args.output_table)):
             parser.error("--expand requires --seeds-table, --base-table, and --output-table")
-        expand_candidates(connection, args.split, args.seeds_table, args.base_table,
-                          args.output_table, args.max_candidates, args.max_key_frequency)
+        if args.partitions < 1:
+            parser.error("--partitions must be positive")
+        if args.partitions == 1:
+            expand_candidates(connection, args.split, args.seeds_table, args.base_table,
+                              args.output_table, args.max_candidates, args.max_key_frequency)
+        else:
+            staging = f"{args.output_table}_staging"
+            if args.partition_index is None:
+                connection.close()
+                for part in range(args.start_partition, args.partitions):
+                    subprocess.run([
+                        sys.executable, "-m", "amzn.blocking", "--split", args.split,
+                        "--expand", "--seeds-table", args.seeds_table,
+                        "--base-table", args.base_table,
+                        "--output-table", args.output_table,
+                        "--max-candidates", str(args.max_candidates),
+                        "--max-key-frequency", str(args.max_key_frequency),
+                        "--cache-dir", str(args.cache_dir),
+                        "--threads", str(args.threads),
+                        "--partitions", str(args.partitions),
+                        "--partition-index", str(part),
+                    ], check=True)
+                connection = connect(args.cache_dir / "resolution.duckdb", args.cache_dir,
+                                     args.threads)
+                connection.execute(f"DROP TABLE IF EXISTS {args.output_table}")
+                connection.execute(f"ALTER TABLE {staging} RENAME TO {args.output_table}")
+                print(f"{args.output_table}: {connection.execute(f'SELECT count(*) FROM {args.output_table}').fetchone()[0]:,} total sibling pairs", flush=True)
+            else:
+                part = args.partition_index
+                if not 0 <= part < args.partitions:
+                    parser.error("--partition-index is outside --partitions")
+                part_table = f"{args.output_table}_part"
+                print(f"Expansion partition {part + 1}/{args.partitions}", flush=True)
+                expand_candidates(connection, args.split, args.seeds_table, args.base_table,
+                                  part_table, args.max_candidates, args.max_key_frequency,
+                                  source_filter=f"hash(s.source1_entity_id) % {args.partitions} = {part}")
+                if part == 0:
+                    connection.execute(f"CREATE OR REPLACE TABLE {staging} AS SELECT * FROM {part_table}")
+                else:
+                    connection.execute(f"INSERT INTO {staging} SELECT * FROM {part_table}")
+                connection.execute(f"DROP TABLE {part_table}")
     if args.combine:
         if not all((args.base_table, args.expanded_table, args.output_table)):
             parser.error("--combine requires --base-table, --expanded-table, and --output-table")
