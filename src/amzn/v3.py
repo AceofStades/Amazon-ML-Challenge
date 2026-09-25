@@ -171,13 +171,13 @@ def build_features(args: argparse.Namespace) -> None:
             pl.col("cosine").filter(pl.col("rank") == 1).first().alias("s_top_cos"),
             pl.col("cosine").filter(pl.col("rank") == 10).first().alias("s_tenth_cos"),
             pl.col("rank").filter(pl.col("rank") <= args.k).max().alias("knn_depth"),
-        ).rename({"q": "si"})
+        ).rename({"q": "si"}).collect().lazy()
     )
     rknn = pl.scan_parquet(folder / f"{args.split}_rknn.parquet")
     t_stats = rknn.group_by("q").agg(
         pl.col("cosine").filter(pl.col("rank") == 1).first().alias("t_best_cos"),
         pl.col("cosine").filter(pl.col("rank") == 2).first().alias("t_second_cos"),
-    ).rename({"q": "ti"})
+    ).rename({"q": "ti"}).collect().lazy()
     s_rank = rknn.select(pl.col("q").alias("ti"), pl.col("d").alias("si"),
                          pl.col("rank").cast(pl.Float32).alias("s_rank_for_t"))
     knn_rank = knn.filter(pl.col("rank") <= args.k).select(
