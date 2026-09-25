@@ -78,6 +78,12 @@ class BlockingTest(unittest.TestCase):
             self.assertIn("S1-1\tS2-1,S3-2\n", text)
             self.assertIn("S1-3\t\n", text)
             self.assertNotIn('""', text)
+            partitioned_output = cache / "candidate_pairs_partitioned.tsv"
+            write_grouped_output(
+                connection, "test_features", "candidate_entity_id",
+                partitioned_output, "candidate_entity_ids", partitions=2,
+            )
+            self.assertEqual(set(text.splitlines()), set(partitioned_output.read_text().splitlines()))
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 from pathlib import Path
 
 import duckdb
@@ -18,21 +19,41 @@ from .features import create_features
 def write_grouped_output(
     connection: duckdb.DuckDBPyConnection, pairs_table: str,
     value_column: str, output_path: Path, output_column: str,
+    partitions: int = 1,
 ) -> None:
     assert pairs_table.replace("_", "").isalnum()
     assert value_column.replace("_", "").isalnum()
     assert output_column.replace("_", "").isalnum()
-    connection.execute(f"""
-        COPY (
-            SELECT s.entity_id AS source1_entity_id,
-                   string_agg(p.{value_column}, ',' ORDER BY p.{value_column})
-                       AS {output_column}
-            FROM test_source1 s
-            LEFT JOIN {pairs_table} p ON p.source1_entity_id = s.entity_id
-            GROUP BY s.entity_id
-            ORDER BY s.entity_id
-        ) TO '{sql_string(output_path)}' (HEADER true, DELIMITER '\\t')
-    """)
+    if partitions < 1:
+        raise ValueError("partitions must be positive")
+    temporary = output_path.with_name(output_path.name + ".tmp")
+    with temporary.open("wb") as destination:
+        for part in range(partitions):
+            part_path = output_path.with_name(output_path.name + f".part{part}.tmp")
+            connection.execute(f"""
+                COPY (
+                    SELECT s.entity_id AS source1_entity_id,
+                           string_agg(p.{value_column}, ',' ORDER BY p.{value_column})
+                               AS {output_column}
+                    FROM test_source1 s
+                    LEFT JOIN (
+                        SELECT source1_entity_id, {value_column}
+                        FROM {pairs_table}
+                        WHERE hash(source1_entity_id) % {partitions} = {part}
+                    ) p ON p.source1_entity_id = s.entity_id
+                    WHERE hash(s.entity_id) % {partitions} = {part}
+                    GROUP BY s.entity_id
+                    ORDER BY s.entity_id
+                ) TO '{sql_string(part_path)}' (HEADER true, DELIMITER '\\t')
+            """)
+            with part_path.open("rb") as source:
+                if part:
+                    source.readline()
+                shutil.copyfileobj(source, destination, length=8 * 1024 * 1024)
+            part_path.unlink()
+            if partitions > 1:
+                print(f"Wrote output partition {part + 1}/{partitions}", flush=True)
+    temporary.replace(output_path)
 
 
 def infer(
@@ -40,6 +61,7 @@ def infer(
     candidate_table: str = "test_candidates",
     feature_table: str = "test_features",
     batch_size: int = 100_000,
+    reuse_features: bool = False,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = json.loads((model_dir / "training_metrics.json").read_text())
@@ -49,8 +71,9 @@ def infer(
     model.load_model(model_dir / "pair_model.json")
     model.set_param({"device": "cuda"})
     connection = connect(database, cache_dir)
-    create_features(connection, "test", candidate_table, feature_table,
-                    include_seed_features="seed_score" in names)
+    if not reuse_features:
+        create_features(connection, "test", candidate_table, feature_table,
+                        include_seed_features="seed_score" in names)
     candidate_count = connection.execute(f"SELECT count(*) FROM {candidate_table}").fetchone()[0]
     feature_count = connection.execute(f"SELECT count(*) FROM {feature_table}").fetchone()[0]
     if candidate_count != feature_count:
@@ -58,8 +81,8 @@ def infer(
 
     print("Writing candidate_pairs.tsv", flush=True)
     write_grouped_output(
-        connection, feature_table, "candidate_entity_id",
-        output_dir / "candidate_pairs.tsv", "candidate_entity_ids",
+        connection, candidate_table, "candidate_entity_id",
+        output_dir / "candidate_pairs.tsv", "candidate_entity_ids", partitions=16,
     )
     fields = ", ".join(names)
     cursor = connection.execute(
@@ -104,10 +127,11 @@ def main() -> None:
     parser.add_argument("--candidate-table", default="test_candidates")
     parser.add_argument("--feature-table", default="test_features")
     parser.add_argument("--batch-size", type=int, default=100_000)
+    parser.add_argument("--reuse-features", action="store_true")
     args = parser.parse_args()
     infer(args.database, args.cache_dir, args.output_dir,
           args.model_dir or args.output_dir, args.candidate_table,
-          args.feature_table, args.batch_size)
+          args.feature_table, args.batch_size, args.reuse_features)
 
 
 if __name__ == "__main__":

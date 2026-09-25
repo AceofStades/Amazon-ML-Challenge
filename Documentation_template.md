@@ -22,7 +22,7 @@ The first blocker indexes targets by exact canonical name/address, pairs of name
 
 The first classifier scores those pairs. Links with predicted probability at least 0.9 become expansion seeds. On the disjoint validation split, these seeds had 99.35% link precision. Each seed's rare indexed keys (target frequency at most 40) retrieve other target records. The second blocker ranks them using similarity to both the seed and original Source 1 record, excludes first-pass pairs, and keeps at most 30 additional candidates per Source 1 record. The final candidate set is the union of both passes; every pair in it is scored by the final classifier and every predicted match appears in it.
 
-On a deterministic 6% training sample, the first 30-candidate pass retrieves 409,740 of 458,727 known links (0.893211 pair recall). Expansion retrieves 14,392 additional links, raising candidate recall to 0.924587. The combined set has 7,053,012 pairs for 132,455 Source 1 records, averaging 53.25 candidates per Source 1 record. This cuts billions of possible comparisons per Source 1 entity to a few dozen.
+On a deterministic 6% training sample, the first 30-candidate pass retrieves 409,740 of 458,727 known links (0.893211 pair recall). Expansion retrieves 14,392 additional links, raising candidate recall to 0.924587. The combined set has 7,053,012 pairs across 132,455 Source 1 records, averaging 53.25 candidates per Source 1 record. This cuts roughly ten million possible comparisons per Source 1 entity to a few dozen.
 
 ## 4. Matching Model and Features
 
