@@ -8,7 +8,10 @@ dependencies = [
     "duckdb>=1.5.5",
     "numpy>=2.5.3",
     "polars>=1.44.2",
+    "pyarrow>=25.0.1",
     "rapidfuzz>=3.14.6",
+    "torch>=2.14.0",
+    "transformers>=5.17.0",
     "unidecode>=1.4.0",
     "xgboost>=3.4.1",
 ]
