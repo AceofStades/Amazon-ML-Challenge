@@ -26,7 +26,72 @@ EMBED_FEATURES = (
     "cosine", "embed_rank", "in_keys", "in_knn", "cos_minus_top", "cos_rank_union",
     "s_top_cos", "s_tenth_cos", "t_best_cos", "t_second_cos", "s_rank_for_t",
     "cos_minus_t_best", "sib_max", "sib_support", "sib_count", "union_size",
+    "name_idf_cos", "name_idf_max_shared", "name_idf_s_cover", "name_idf_t_cover",
+    "name_idf_max_missing", "address_idf_cos", "address_idf_s_cover", "address_idf_t_cover",
+    "s_name_dup", "t_name_dup", "s_name_in_targets",
 )
+
+
+def token_tables(cache_dir: Path, split: str) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Per-record token lists with IDF weights, computed over all records of a split."""
+    records = pl.concat([
+        pl.read_csv(cache_dir / f"{split}_source{i}.tsv", separator="	", quote_char=None,
+                    infer_schema=False, missing_utf8_is_empty_string=True,
+                    columns=["entity_id", "country", "name_core", "address_core"])
+        .with_columns(pl.lit(i == 1).alias("is_s1"))
+        for i in (1, 2, 3)
+    ])
+    total = records.height
+    frames = {}
+    for field in ("name", "address"):
+        tokens = (records.select("entity_id", pl.col(f"{field}_core").str.split(" ").list.unique().alias("tok"))
+                  .explode("tok").filter(pl.col("tok").is_not_null() & (pl.col("tok") != "")))
+        idf = tokens.group_by("tok").agg(pl.len().alias("df")).with_columns(
+            (np.log(total) - pl.col("df").log()).cast(pl.Float32).alias("idf")).select("tok", "idf")
+        frames[field] = tokens.join(idf, on="tok")
+    dup = records.filter(pl.col("name_core") != "").group_by("country", "name_core", "is_s1").agg(pl.len().alias("n"))
+    counts = records.join(dup, on=["country", "name_core", "is_s1"], how="left").select(
+        "entity_id", pl.col("n").fill_null(0).cast(pl.Float32).alias("name_dup"))
+    s1_names = records.filter(pl.col("is_s1")).select("entity_id", "country", "name_core")
+    in_targets = s1_names.join(dup.filter(~pl.col("is_s1")), on=["country", "name_core"], how="left").select(
+        "entity_id", pl.col("n").fill_null(0).cast(pl.Float32).alias("s_name_in_targets"))
+    counts = counts.join(in_targets, on="entity_id", how="left").with_columns(pl.col("s_name_in_targets").fill_null(0))
+    return frames, counts
+
+
+def idf_features(pairs: pl.DataFrame, frames: dict, counts: pl.DataFrame) -> pl.DataFrame:
+    pairs = pairs.with_row_index("pair")
+    ids = pairs.select("pair", "source1_entity_id", "candidate_entity_id")
+    for field in ("name", "address"):
+        tokens = frames[field]
+        s_tok = ids.join(tokens, left_on="source1_entity_id", right_on="entity_id").select("pair", "tok", "idf")
+        t_tok = ids.join(tokens, left_on="candidate_entity_id", right_on="entity_id").select("pair", "tok", "idf")
+        s_sum = s_tok.group_by("pair").agg((pl.col("idf") ** 2).sum().alias("ss"), pl.col("idf").sum().alias("s1"))
+        t_sum = t_tok.group_by("pair").agg((pl.col("idf") ** 2).sum().alias("ts"), pl.col("idf").sum().alias("t1"))
+        shared = s_tok.join(t_tok.select("pair", "tok"), on=["pair", "tok"]).group_by("pair").agg(
+            (pl.col("idf") ** 2).sum().alias("sh2"), pl.col("idf").sum().alias("sh1"),
+            pl.col("idf").max().alias("shmax"))
+        missing = s_tok.join(t_tok.select("pair", "tok"), on=["pair", "tok"], how="anti").group_by("pair").agg(
+            pl.col("idf").max().alias("mmax"))
+        stats = (ids.select("pair").join(s_sum, on="pair", how="left").join(t_sum, on="pair", how="left")
+                 .join(shared, on="pair", how="left").join(missing, on="pair", how="left").fill_null(0))
+        stats = stats.select(
+            "pair",
+            (pl.col("sh2") / (pl.col("ss") * pl.col("ts")).sqrt().clip(1e-6)).alias(f"{field}_idf_cos"),
+            (pl.col("sh1") / pl.col("s1").clip(1e-6)).alias(f"{field}_idf_s_cover"),
+            (pl.col("sh1") / pl.col("t1").clip(1e-6)).alias(f"{field}_idf_t_cover"),
+            pl.col("shmax").alias(f"{field}_idf_max_shared"),
+            pl.col("mmax").alias(f"{field}_idf_max_missing"),
+        )
+        if field == "address":
+            stats = stats.drop("address_idf_max_shared", "address_idf_max_missing")
+        pairs = pairs.join(stats, on="pair", how="left")
+    s_counts = counts.select("entity_id", pl.col("name_dup").alias("s_name_dup"), "s_name_in_targets")
+    t_counts = counts.select("entity_id", pl.col("name_dup").alias("t_name_dup"))
+    pairs = (pairs.join(s_counts, left_on="source1_entity_id", right_on="entity_id", how="left")
+             .join(t_counts, left_on="candidate_entity_id", right_on="entity_id", how="left"))
+    return pairs.sort("pair").drop("pair").with_columns(pl.col(pl.Float64).cast(pl.Float32))
+
 
 
 def id_frames(folder: Path, split: str) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -182,6 +247,8 @@ def build_features(args: argparse.Namespace) -> None:
                          pl.col("rank").cast(pl.Float32).alias("s_rank_for_t"))
     knn_rank = knn.filter(pl.col("rank") <= args.k).select(
         pl.col("q").alias("si"), pl.col("d").alias("ti"), pl.col("rank").cast(pl.Float32).alias("embed_rank"))
+    frames, counts = token_tables(Path(args.cache_dir), args.split)
+    print("token tables ready", flush=True)
     for part in range(args.partitions):
         started = time.time()
         frame = connection.execute(f"""
@@ -204,6 +271,7 @@ def build_features(args: argparse.Namespace) -> None:
             .collect()
         )
         frame = context_features(frame, s_vec, t_vec)
+        frame = idf_features(frame, frames, counts)
         frame = frame.with_columns((pl.col("cosine") - pl.col("t_best_cos")).alias("cos_minus_t_best"))
         frame.drop("knn_depth").write_parquet(out_dir / f"part{part:02d}.parquet")
         print(f"partition {part + 1}/{args.partitions}: {frame.height:,} rows in {time.time() - started:.0f}s", flush=True)
