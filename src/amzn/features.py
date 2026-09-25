@@ -11,6 +11,9 @@ FEATURE_NAMES = (
     "address_exact", "name_anchor_overlap", "address_anchor_overlap",
     "house_match", "house_conflict", "name_length_ratio", "address_length_ratio",
     "name_missing", "address_missing", "target_is_source3",
+    "name_bigram_jaccard", "address_bigram_jaccard", "name_token_jaccard",
+    "address_token_jaccard", "name_edit_similarity", "name_compact_jw",
+    "name_anchor_jw", "address_anchor_jw", "address_number_jaccard",
 )
 
 
@@ -52,7 +55,46 @@ def create_features(
                 greatest(length(s.address), length(t.address), 1)) AS address_length_ratio,
                (s.name IS NULL OR s.name = '' OR t.name IS NULL OR t.name = '')::INT::FLOAT AS name_missing,
                (s.address IS NULL OR s.address = '' OR t.address IS NULL OR t.address = '')::INT::FLOAT AS address_missing,
-               starts_with(t.entity_id, 'S3-')::INT::FLOAT AS target_is_source3
+               starts_with(t.entity_id, 'S3-')::INT::FLOAT AS target_is_source3,
+               coalesce(jaccard(s.name_core, t.name_core), 0)::FLOAT AS name_bigram_jaccard,
+               CASE WHEN s.address <> '' AND t.address <> ''
+                    THEN coalesce(jaccard(s.address_core, t.address_core), 0)
+                    ELSE 0 END::FLOAT AS address_bigram_jaccard,
+               (list_unique(list_intersect(string_split(s.name_core, ' '), string_split(t.name_core, ' ')))::FLOAT /
+                greatest(list_unique(string_split(s.name_core, ' ')) +
+                         list_unique(string_split(t.name_core, ' ')) -
+                         list_unique(list_intersect(string_split(s.name_core, ' '), string_split(t.name_core, ' '))), 1))
+                    AS name_token_jaccard,
+               CASE WHEN s.address <> '' AND t.address <> '' THEN
+                   list_unique(list_intersect(string_split(s.address_core, ' '), string_split(t.address_core, ' ')))::FLOAT /
+                   greatest(list_unique(string_split(s.address_core, ' ')) +
+                            list_unique(string_split(t.address_core, ' ')) -
+                            list_unique(list_intersect(string_split(s.address_core, ' '), string_split(t.address_core, ' '))), 1)
+                   ELSE 0 END AS address_token_jaccard,
+               (1 - levenshtein(s.name_core, t.name_core)::FLOAT /
+                greatest(length(s.name_core), length(t.name_core), 1)) AS name_edit_similarity,
+               coalesce(jaro_winkler_similarity(replace(s.name_core, ' ', ''),
+                                                replace(t.name_core, ' ', '')), 0)::FLOAT AS name_compact_jw,
+               greatest(
+                   coalesce(jaro_winkler_similarity(nullif(s.name_anchor1, ''), nullif(t.name_anchor1, '')), 0),
+                   coalesce(jaro_winkler_similarity(nullif(s.name_anchor1, ''), nullif(t.name_anchor2, '')), 0),
+                   coalesce(jaro_winkler_similarity(nullif(s.name_anchor2, ''), nullif(t.name_anchor1, '')), 0),
+                   coalesce(jaro_winkler_similarity(nullif(s.name_anchor2, ''), nullif(t.name_anchor2, '')), 0)
+               )::FLOAT AS name_anchor_jw,
+               greatest(
+                   coalesce(jaro_winkler_similarity(nullif(s.address_anchor1, ''), nullif(t.address_anchor1, '')), 0),
+                   coalesce(jaro_winkler_similarity(nullif(s.address_anchor1, ''), nullif(t.address_anchor2, '')), 0),
+                   coalesce(jaro_winkler_similarity(nullif(s.address_anchor2, ''), nullif(t.address_anchor1, '')), 0),
+                   coalesce(jaro_winkler_similarity(nullif(s.address_anchor2, ''), nullif(t.address_anchor2, '')), 0)
+               )::FLOAT AS address_anchor_jw,
+               CASE WHEN s.address <> '' AND t.address <> '' THEN
+                   list_unique(list_intersect(regexp_extract_all(s.address, '[0-9]+'),
+                                              regexp_extract_all(t.address, '[0-9]+')))::FLOAT /
+                   greatest(list_unique(regexp_extract_all(s.address, '[0-9]+')) +
+                            list_unique(regexp_extract_all(t.address, '[0-9]+')) -
+                            list_unique(list_intersect(regexp_extract_all(s.address, '[0-9]+'),
+                                                       regexp_extract_all(t.address, '[0-9]+'))), 1)
+                   ELSE 0 END AS address_number_jaccard
         FROM {candidates} c
         JOIN {split}_source1 s ON c.source1_entity_id = s.entity_id
         JOIN {split}_targets t ON c.candidate_entity_id = t.entity_id
