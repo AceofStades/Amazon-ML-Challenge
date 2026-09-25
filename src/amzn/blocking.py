@@ -151,6 +151,113 @@ def generate_candidates(
     print(f"{output_table}: {count:,} pairs for {entities:,} Source 1 records", flush=True)
 
 
+def expand_candidates(
+    connection: duckdb.DuckDBPyConnection,
+    split: str,
+    seeds_table: str,
+    base_table: str,
+    output_table: str,
+    max_candidates: int = 30,
+    max_key_frequency: int = 40,
+    base_cap: int = 30,
+) -> None:
+    """Retrieve near neighbors of confident target matches as extra candidates."""
+    assert split in {"train", "test"}
+    for table in (seeds_table, base_table, output_table):
+        assert table.replace("_", "").isalnum()
+    connection.execute(f"""
+        CREATE TABLE IF NOT EXISTS {split}_target_key_frequencies AS
+        SELECT key, count(*) AS frequency FROM {split}_target_keys GROUP BY key
+    """)
+    connection.execute(f"""
+        CREATE OR REPLACE TABLE {output_table} AS
+        WITH seed_keys AS (
+            SELECT DISTINCT s.source1_entity_id, s.seed_id, k.key
+            FROM {seeds_table} s
+            JOIN {split}_target_keys k ON s.seed_id = k.entity_id
+            JOIN {split}_target_key_frequencies f ON k.key = f.key
+            WHERE f.frequency <= {int(max_key_frequency)}
+        ),
+        hits AS (
+            SELECT sk.source1_entity_id, sk.seed_id,
+                   tk.entity_id AS candidate_entity_id,
+                   count(*) AS matching_keys
+            FROM seed_keys sk
+            JOIN {split}_target_keys tk USING (key)
+            WHERE sk.seed_id <> tk.entity_id
+            GROUP BY 1, 2, 3
+        ),
+        scored AS (
+            SELECT h.source1_entity_id, h.candidate_entity_id, h.matching_keys,
+                   jaro_winkler_similarity(seed.name, target.name) AS seed_name_jw,
+                   coalesce(jaro_winkler_similarity(seed.address, target.address), 0) AS seed_address_jw,
+                   70 * jaro_winkler_similarity(seed.name, target.name)
+                   + 60 * coalesce(jaro_winkler_similarity(seed.address, target.address), 0)
+                   + 3 * h.matching_keys AS seed_score,
+                   jaro_winkler_similarity(source.name, target.name) AS name_jw,
+                   coalesce(jaro_winkler_similarity(source.address, target.address), 0) AS address_jw,
+                   (source.house <> '' AND source.house = target.house)::INT AS house_equal
+            FROM hits h
+            JOIN {split}_source1 source ON h.source1_entity_id = source.entity_id
+            JOIN {split}_targets seed ON h.seed_id = seed.entity_id
+            JOIN {split}_targets target ON h.candidate_entity_id = target.entity_id
+            ANTI JOIN {base_table} b ON h.source1_entity_id = b.source1_entity_id
+                                    AND h.candidate_entity_id = b.candidate_entity_id
+        ),
+        grouped AS (
+            SELECT source1_entity_id, candidate_entity_id,
+                   max(matching_keys) AS matching_keys,
+                   max(seed_score) AS seed_score,
+                   max(seed_name_jw) AS seed_name_jw,
+                   max(seed_address_jw) AS seed_address_jw,
+                   max(name_jw) AS name_jw,
+                   max(address_jw) AS address_jw,
+                   max(house_equal) AS house_equal
+            FROM scored GROUP BY 1, 2
+        ),
+        ranked AS (
+            SELECT *, row_number() OVER (
+                PARTITION BY source1_entity_id
+                ORDER BY seed_score + 70 * name_jw + 60 * address_jw
+                         + 12 * house_equal DESC, candidate_entity_id
+            ) AS expansion_rank
+            FROM grouped
+        )
+        SELECT source1_entity_id, candidate_entity_id,
+               0 AS block_weight, matching_keys,
+               name_jw, address_jw, house_equal,
+               {int(base_cap)} + expansion_rank AS candidate_rank,
+               seed_score, seed_name_jw, seed_address_jw
+        FROM ranked WHERE expansion_rank <= {int(max_candidates)}
+    """)
+    count, entities = connection.execute(
+        f"SELECT count(*), count(DISTINCT source1_entity_id) FROM {output_table}"
+    ).fetchone()
+    print(f"{output_table}: {count:,} sibling candidates for {entities:,} Source 1 records", flush=True)
+
+
+def combine_candidates(
+    connection: duckdb.DuckDBPyConnection, base_table: str,
+    expanded_table: str, output_table: str,
+) -> None:
+    """Keep exactly the union that the final classifier will score."""
+    for table in (base_table, expanded_table, output_table):
+        assert table.replace("_", "").isalnum()
+    fields = (
+        "source1_entity_id, candidate_entity_id, block_weight, matching_keys, "
+        "name_jw, address_jw, house_equal, candidate_rank"
+    )
+    connection.execute(f"""
+        CREATE OR REPLACE TABLE {output_table} AS
+        SELECT {fields}, 0.0 AS seed_score, 0.0 AS seed_name_jw,
+               0.0 AS seed_address_jw FROM {base_table}
+        UNION ALL
+        SELECT {fields}, seed_score, seed_name_jw, seed_address_jw
+        FROM {expanded_table}
+    """)
+    print(f"{output_table}: {connection.execute(f'SELECT count(*) FROM {output_table}').fetchone()[0]:,} pairs", flush=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
@@ -161,6 +268,13 @@ def main() -> None:
     parser.add_argument("--candidates", action="store_true")
     parser.add_argument("--sample-per-thousand", type=int, default=0)
     parser.add_argument("--max-candidates", type=int, default=30)
+    parser.add_argument("--expand", action="store_true")
+    parser.add_argument("--combine", action="store_true")
+    parser.add_argument("--expanded-table")
+    parser.add_argument("--seeds-table")
+    parser.add_argument("--base-table")
+    parser.add_argument("--output-table")
+    parser.add_argument("--max-key-frequency", type=int, default=40)
     args = parser.parse_args()
 
     connection = connect(args.cache_dir / "resolution.duckdb", args.cache_dir, args.threads)
@@ -173,6 +287,16 @@ def main() -> None:
         source_filter = f"hash(entity_id) % 1000 < {sample}" if sample else "TRUE"
         table = f"{args.split}_sample_candidates" if sample else f"{args.split}_candidates"
         generate_candidates(connection, args.split, table, source_filter, args.max_candidates)
+    if args.expand:
+        if not all((args.seeds_table, args.base_table, args.output_table)):
+            parser.error("--expand requires --seeds-table, --base-table, and --output-table")
+        expand_candidates(connection, args.split, args.seeds_table, args.base_table,
+                          args.output_table, args.max_candidates, args.max_key_frequency)
+    if args.combine:
+        if not all((args.base_table, args.expanded_table, args.output_table)):
+            parser.error("--combine requires --base-table, --expanded-table, and --output-table")
+        combine_candidates(connection, args.base_table, args.expanded_table,
+                           args.output_table)
 
 
 if __name__ == "__main__":

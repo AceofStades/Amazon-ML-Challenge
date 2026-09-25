@@ -13,7 +13,7 @@ import numpy as np
 import xgboost as xgb
 
 from .blocking import connect
-from .features import FEATURE_NAMES, create_features
+from .features import FEATURE_NAMES, SECOND_STAGE_FEATURE_NAMES, create_features
 
 
 def truth_for_ids(path: Path, ids: set[str]) -> dict[str, set[str]]:
@@ -70,11 +70,14 @@ def train(
     validation_start: int = 50,
     validation_end: int = 60,
     rounds: int = 500,
+    include_seed_features: bool = False,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     connection = connect(database, cache_dir)
-    create_features(connection, "train", candidate_table, feature_table)
-    fields = ", ".join(FEATURE_NAMES)
+    names = SECOND_STAGE_FEATURE_NAMES if include_seed_features else FEATURE_NAMES
+    create_features(connection, "train", candidate_table, feature_table,
+                    include_seed_features=include_seed_features)
+    fields = ", ".join(names)
     query = (
         f"SELECT source1_entity_id, candidate_entity_id, {fields}, "
         f"(hash(source1_entity_id) % 1000 BETWEEN {validation_start} "
@@ -83,7 +86,7 @@ def train(
     data = connection.execute(query).fetchnumpy()
     source_ids = data["source1_entity_id"].tolist()
     target_ids = data["candidate_entity_id"].tolist()
-    X = dense_features(data)
+    X = dense_features(data, names)
     validation_mask = np.asarray(data["is_validation"], dtype=bool)
     del data
     source_set = set(source_ids)
@@ -104,8 +107,8 @@ def train(
     train_mask = ~validation_mask
     print(f"Training pairs: {train_mask.sum():,}; validation pairs: {validation_mask.sum():,}", flush=True)
     print(f"Training positives: {int(labels[train_mask].sum()):,}", flush=True)
-    training = xgb.DMatrix(X[train_mask], label=labels[train_mask], feature_names=list(FEATURE_NAMES))
-    validation = xgb.DMatrix(X[validation_mask], label=labels[validation_mask], feature_names=list(FEATURE_NAMES))
+    training = xgb.DMatrix(X[train_mask], label=labels[train_mask], feature_names=list(names))
+    validation = xgb.DMatrix(X[validation_mask], label=labels[validation_mask], feature_names=list(names))
     model = xgb.train(
         {
             "objective": "binary:logistic", "eval_metric": "aucpr", "tree_method": "hist",
@@ -119,10 +122,14 @@ def train(
     probabilities = model.predict(validation, iteration_range=(0, model.best_iteration + 1))
     validation_sources = [source_ids[index] for index in np.flatnonzero(validation_mask)]
     validation_targets = [target_ids[index] for index in np.flatnonzero(validation_mask)]
-    validation_ranks = X[validation_mask, FEATURE_NAMES.index("candidate_rank")]
+    validation_ranks = X[validation_mask, names.index("candidate_rank")]
     thresholds = np.arange(0.05, 0.951, 0.025)
     by_cap = {}
-    for cap in (5, 10, 15, 20, 30):
+    maximum_rank = int(connection.execute(
+        f"SELECT max(candidate_rank) FROM {feature_table}"
+    ).fetchone()[0])
+    caps = [cap for cap in (5, 10, 15, 20, 30, 40, 50, 60) if cap <= maximum_rank]
+    for cap in caps:
         scored = [
             (float(threshold), macro_f05(
                 validation_sources, validation_targets, probabilities, validation_ranks,
@@ -139,7 +146,7 @@ def train(
     model_path = output_dir / "pair_model.json"
     model.save_model(model_path)
     result = {
-        "model": str(model_path), "features": list(FEATURE_NAMES),
+        "model": str(model_path), "features": list(names),
         "best_iteration": model.best_iteration, "threshold": threshold,
         "macro_f05": score, "candidate_cap": selected_cap,
         "validation_by_candidate_cap": by_cap,
@@ -159,8 +166,13 @@ def main() -> None:
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument("--rounds", type=int, default=500)
+    parser.add_argument("--candidate-table", default="train_sample_candidates")
+    parser.add_argument("--feature-table", default="train_sample_features")
+    parser.add_argument("--include-seed-features", action="store_true")
     args = parser.parse_args()
-    train(args.database, args.cache_dir, args.truth, args.output_dir, rounds=args.rounds)
+    train(args.database, args.cache_dir, args.truth, args.output_dir,
+          candidate_table=args.candidate_table, feature_table=args.feature_table,
+          rounds=args.rounds, include_seed_features=args.include_seed_features)
 
 
 if __name__ == "__main__":

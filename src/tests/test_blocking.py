@@ -3,7 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from amzn.blocking import connect, generate_candidates, import_split, index_targets
+from amzn.blocking import (
+    combine_candidates, connect, expand_candidates, generate_candidates,
+    import_split, index_targets,
+)
 from amzn.features import create_features
 from amzn.infer import write_grouped_output
 from amzn.normalize import RECORD_COLUMNS, normalize_record
@@ -23,7 +26,10 @@ class BlockingTest(unittest.TestCase):
                     ("S2-1", "राज इन्वेस्टमेंट्स एलएलपी", "6(29) C.I.T. Colony, Chennai", "India"),
                     ("S2-2", "Payne Enterprices", "3315 Fremont St, Peoria", "US"),
                 ],
-                3: [("S3-1", "Other Business", "91 Elsewhere", "France")],
+                3: [
+                    ("S3-1", "Other Business", "91 Elsewhere", "France"),
+                    ("S3-2", "Raj Investments Private", "6(29) C.I.T. Colony, Chennai", "India"),
+                ],
             }
             for source, rows in records.items():
                 with (cache / f"train_source{source}.tsv").open("w", newline="") as handle:
@@ -49,6 +55,18 @@ class BlockingTest(unittest.TestCase):
             self.assertIn(("S1-2", "S2-2"), pairs)
             self.assertNotIn(("S1-1", "S3-1"), pairs)
 
+            connection.execute("CREATE TABLE base_only AS SELECT * FROM candidate_pairs WHERE candidate_entity_id='S2-1'")
+            connection.execute("CREATE TABLE confident_seeds(source1_entity_id VARCHAR, seed_id VARCHAR)")
+            connection.execute("INSERT INTO confident_seeds VALUES ('S1-1', 'S2-1')")
+            expand_candidates(connection, "train", "confident_seeds", "base_only", "siblings")
+            combine_candidates(connection, "base_only", "siblings", "all_candidates")
+            self.assertIn(("S1-1", "S3-2"), connection.execute(
+                "SELECT source1_entity_id, candidate_entity_id FROM siblings"
+            ).fetchall())
+            create_features(connection, "train", "all_candidates", "all_features",
+                            include_seed_features=True)
+            self.assertEqual(connection.execute("SELECT count(*) FROM all_features").fetchone()[0], 2)
+
             connection.execute("CREATE TABLE test_source1 AS SELECT * FROM train_source1")
             connection.execute("CREATE TABLE test_features AS SELECT * FROM pair_features")
             output = cache / "candidate_pairs.tsv"
@@ -57,7 +75,7 @@ class BlockingTest(unittest.TestCase):
                 "candidate_entity_ids",
             )
             text = output.read_text()
-            self.assertIn("S1-1\tS2-1\n", text)
+            self.assertIn("S1-1\tS2-1,S3-2\n", text)
             self.assertIn("S1-3\t\n", text)
             self.assertNotIn('""', text)
 

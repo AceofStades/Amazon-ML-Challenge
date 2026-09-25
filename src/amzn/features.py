@@ -16,13 +16,24 @@ FEATURE_NAMES = (
     "name_anchor_jw", "address_anchor_jw", "address_number_jaccard",
 )
 
+SECOND_STAGE_FEATURE_NAMES = FEATURE_NAMES + (
+    "seed_score", "seed_name_jw", "seed_address_jw",
+)
+
 
 def create_features(
-    connection: duckdb.DuckDBPyConnection, split: str, candidates: str, output: str
+    connection: duckdb.DuckDBPyConnection, split: str, candidates: str, output: str,
+    include_seed_features: bool = False,
 ) -> None:
     assert split in {"train", "test"}
     assert candidates.replace("_", "").isalnum()
     assert output.replace("_", "").isalnum()
+    seed_fields = (
+        ", coalesce(c.seed_score, 0)::FLOAT AS seed_score"
+        ", coalesce(c.seed_name_jw, 0)::FLOAT AS seed_name_jw"
+        ", coalesce(c.seed_address_jw, 0)::FLOAT AS seed_address_jw"
+        if include_seed_features else ""
+    )
     connection.execute(f"""
         CREATE OR REPLACE TABLE {output} AS
         SELECT c.source1_entity_id, c.candidate_entity_id,
@@ -95,6 +106,7 @@ def create_features(
                             list_unique(list_intersect(regexp_extract_all(s.address, '[0-9]+'),
                                                        regexp_extract_all(t.address, '[0-9]+'))), 1)
                    ELSE 0 END AS address_number_jaccard
+               {seed_fields}
         FROM {candidates} c
         JOIN {split}_source1 s ON c.source1_entity_id = s.entity_id
         JOIN {split}_targets t ON c.candidate_entity_id = t.entity_id

@@ -12,7 +12,7 @@ import numpy as np
 import xgboost as xgb
 
 from .blocking import connect, sql_string
-from .features import FEATURE_NAMES, create_features
+from .features import create_features
 
 
 def write_grouped_output(
@@ -35,27 +35,35 @@ def write_grouped_output(
     """)
 
 
-def infer(database: Path, cache_dir: Path, output_dir: Path, batch_size: int = 100_000) -> None:
+def infer(
+    database: Path, cache_dir: Path, output_dir: Path, model_dir: Path,
+    candidate_table: str = "test_candidates",
+    feature_table: str = "test_features",
+    batch_size: int = 100_000,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    metadata = json.loads((output_dir / "training_metrics.json").read_text())
+    metadata = json.loads((model_dir / "training_metrics.json").read_text())
+    names = tuple(metadata["features"])
     threshold = float(metadata["threshold"])
     model = xgb.Booster()
-    model.load_model(output_dir / "pair_model.json")
+    model.load_model(model_dir / "pair_model.json")
+    model.set_param({"device": "cuda"})
     connection = connect(database, cache_dir)
-    create_features(connection, "test", "test_candidates", "test_features")
-    candidate_count = connection.execute("SELECT count(*) FROM test_candidates").fetchone()[0]
-    feature_count = connection.execute("SELECT count(*) FROM test_features").fetchone()[0]
+    create_features(connection, "test", candidate_table, feature_table,
+                    include_seed_features="seed_score" in names)
+    candidate_count = connection.execute(f"SELECT count(*) FROM {candidate_table}").fetchone()[0]
+    feature_count = connection.execute(f"SELECT count(*) FROM {feature_table}").fetchone()[0]
     if candidate_count != feature_count:
         raise RuntimeError(f"Candidate/feature mismatch: {candidate_count} != {feature_count}")
 
     print("Writing candidate_pairs.tsv", flush=True)
     write_grouped_output(
-        connection, "test_features", "candidate_entity_id",
+        connection, feature_table, "candidate_entity_id",
         output_dir / "candidate_pairs.tsv", "candidate_entity_ids",
     )
-    fields = ", ".join(FEATURE_NAMES)
+    fields = ", ".join(names)
     cursor = connection.execute(
-        f"SELECT source1_entity_id, candidate_entity_id, {fields} FROM test_features"
+        f"SELECT source1_entity_id, candidate_entity_id, {fields} FROM {feature_table}"
     )
     temporary = output_dir / "predicted_pairs.tmp.tsv"
     processed = selected = 0
@@ -65,7 +73,7 @@ def infer(database: Path, cache_dir: Path, output_dir: Path, batch_size: int = 1
         while rows := cursor.fetchmany(batch_size):
             values = np.asarray([row[2:] for row in rows], dtype=np.float32)
             probabilities = model.predict(
-                xgb.DMatrix(values, feature_names=list(FEATURE_NAMES)),
+                xgb.DMatrix(values, feature_names=list(names)),
                 iteration_range=(0, int(metadata["best_iteration"]) + 1),
             )
             for row, probability in zip(rows, probabilities):
@@ -92,9 +100,14 @@ def main() -> None:
     parser.add_argument("--database", type=Path, default=Path("cache/resolution.duckdb"))
     parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
+    parser.add_argument("--model-dir", type=Path)
+    parser.add_argument("--candidate-table", default="test_candidates")
+    parser.add_argument("--feature-table", default="test_features")
     parser.add_argument("--batch-size", type=int, default=100_000)
     args = parser.parse_args()
-    infer(args.database, args.cache_dir, args.output_dir, args.batch_size)
+    infer(args.database, args.cache_dir, args.output_dir,
+          args.model_dir or args.output_dir, args.candidate_table,
+          args.feature_table, args.batch_size)
 
 
 if __name__ == "__main__":
