@@ -15,3 +15,4 @@ data/dataset_cleaned/
 data/dataset_expanded/
 data/dataset_formatted/
 data/dataset_clean/
+*.zip
