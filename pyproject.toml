@@ -1,0 +1,15 @@
+[project]
+name = "claudesplan"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "flashtext>=2.7",
+    "matplotlib>=3.11.2",
+    "pandas>=3.0.6",
+    "polars>=1.44.2",
+    "scikit-learn>=1.9.1",
+    "seaborn>=0.13.2",
+    "unidecode>=1.4.0",
+]
