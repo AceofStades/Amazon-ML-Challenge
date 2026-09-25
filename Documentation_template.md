@@ -34,6 +34,8 @@ The deterministic DuckDB hash split places roughly 5% of training Source 1 entit
 
 The final model achieves macro F0.5 of 0.924402 on 22,144 held-out Source 1 entities. The corresponding first-pass model achieved 0.919435 with at most 30 candidates. At combined candidate caps 40, 50, and 60, final-model validation macro F0.5 is 0.924000, 0.924264, and 0.924402. The small extra gain from cap 60 is retained because leaderboard F0.5 is the primary scored criterion; the candidate count remains small relative to exhaustive search.
 
+Full-test inference scores 91,746,601 candidate pairs (52.96 per Source 1 record) and predicts 5,561,348 links. Both final TSVs passed the supplied validator with full test-ID checks. Each has exactly 1,732,544 Source 1 rows. The matching file has 124,537 empty lists; the candidate file has 340 empty lists. Every predicted match is present in its candidate list.
+
 Remaining false negatives occur when severe transliteration or abbreviated data removes both direct blocking keys and seed-neighbor keys, or when a recovered candidate's Source 1 similarity is too weak for the final model. Repeated business names and incomplete addresses can produce false positives. The 0.9 seed threshold favors precision so errors do not cascade through the expansion pass. France is unseen in the training labels and may cause validation-to-leaderboard shift.
 
 ## 6. Reproduction and Fair Play
