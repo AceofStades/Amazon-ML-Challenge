@@ -39,25 +39,30 @@ def main() -> None:
     mode, *rest = metrics["stage2"]["best"].split("_")
     threshold = float(rest[0])
     mass = float(rest[1]) if len(rest) > 1 else 0.0
-    frame = pl.read_parquet(args.cache_dir / "v3" / "test" / "*.parquet").sort("si", "ti")
-    print(f"test pairs {frame.height:,}; decode {mode} threshold {threshold} mass {mass}", flush=True)
-    X1 = xgb.DMatrix(frame.select(names1).cast(pl.Float32).to_numpy(), feature_names=names1)
-    folds = sorted(args.model_dir.glob("stage1_fold*.json"))
-    p1 = np.zeros(frame.height, np.float32)
-    for path in folds:
+    folds = []
+    for path in sorted(args.model_dir.glob("stage1_fold*.json")):
         model = xgb.Booster()
         model.load_model(path)
         model.set_param({"device": "cuda"})
-        p1 += model.predict(X1) / len(folds)
-    del X1
-    t_vec = np.concatenate([np.load(args.embed_dir / f"test_source{i}.npy", mmap_mode="r") for i in (2, 3)])
-    frame = stage2_context(frame, p1, t_vec)
+        folds.append(model)
     model2 = xgb.Booster()
     model2.load_model(args.model_dir / "stage2.json")
     model2.set_param({"device": "cuda"})
-    p2 = model2.predict(xgb.DMatrix(frame.select(names2).cast(pl.Float32).to_numpy(), feature_names=names2),
-                        iteration_range=(0, metrics["stage2_best_iteration"] + 1))
-    frame = frame.with_columns(p2=p2)
+    t_vec = np.concatenate([np.load(args.embed_dir / f"test_source{i}.npy", mmap_mode="r") for i in (2, 3)])
+    scored = []
+    parts = sorted((args.cache_dir / "v3" / "test").glob("part*.parquet"))
+    for n, path in enumerate(parts):
+        part = pl.read_parquet(path).sort("si", "ti")
+        X1 = xgb.DMatrix(part.select(names1).cast(pl.Float32).to_numpy(), feature_names=names1)
+        p1 = sum(model.predict(X1) for model in folds) / len(folds)
+        part = stage2_context(part, p1.astype(np.float32), t_vec)
+        X2 = xgb.DMatrix(part.select(names2).cast(pl.Float32).to_numpy(), feature_names=names2)
+        p2 = model2.predict(X2, iteration_range=(0, metrics["stage2_best_iteration"] + 1))
+        scored.append(part.select("source1_entity_id", "candidate_entity_id", "si", "ti")
+                      .with_columns(p2=p2))
+        print(f"scored partition {n + 1}/{len(parts)}: {part.height:,} pairs", flush=True)
+    frame = pl.concat(scored)
+    print(f"test pairs {frame.height:,}; decode {mode} threshold {threshold} mass {mass}", flush=True)
 
     if args.one_to_one:
         # Each target belongs to at most one Source 1 entity: keep its best-scoring pair.
