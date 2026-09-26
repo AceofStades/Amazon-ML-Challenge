@@ -483,3 +483,26 @@ validation failures do not stage a submission, that the cutoff drafts with
 available scores, and that a push retry preserves the completed build and
 hardlink. The live readiness check reports twelve Kaggle models and both local
 models pending.
+
+## Exact expected F0.5 decoder (2026-09-27)
+
+The current decoder approximates the random true-count denominator with its
+mean and also multiplies by the probability of a nonempty truth set. That extra
+factor can change the optimal choice: for one candidate with probability 0.55,
+predicting the link has expected F0.5 0.55, versus 0.45 for an empty prediction,
+but the existing approximation predicts empty.
+
+An optional `expected-exact` mode integrates the independent Bernoulli
+true-count distribution using Gaussian quadrature. For F0.5 the integrand is a
+polynomial, so the selected quadrature order is exact up to floating-point
+error. Six small tests compare it with explicit enumeration of every outcome,
+cover zero/one probabilities and empty input, and verify the existing decoder
+dispatch. The existing approximate mode remains the default pending holdout
+evaluation. Independence and probability calibration remain modelling assumptions.
+
+The experiment command is:
+`flock logs/blend.lock env OMP_NUM_THREADS=4 POLARS_MAX_THREADS=4 OPENBLAS_NUM_THREADS=4 .venv/bin/python scripts/decode_compare.py`.
+The comparison uses held-out source buckets 50-59, global stage-1 target
+ownership over all training sources, all ground-truth links including links
+missing from candidates, and singleton entities. Results are recorded in
+`output/decode_exact_holdout.json` and `logs/decode_exact_holdout.log`.

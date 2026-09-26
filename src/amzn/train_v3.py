@@ -132,6 +132,11 @@ def stage2_context(frame: pl.DataFrame, p: np.ndarray, t_vec: np.ndarray,
 def decode(si: np.ndarray, targets: np.ndarray, p: np.ndarray, mode: str, threshold: float,
            recall_mass: float = 0.0) -> dict[int, list[str]]:
     """Return predicted target ids per Source 1 row index."""
+    if mode == "expected-exact":
+        if recall_mass != 0:
+            raise ValueError("expected-exact does not support recall_mass")
+        from .decoding import decode_expected_exact
+        return decode_expected_exact(si, targets, p, threshold)
     order = np.lexsort((-p, si))
     si, targets, p = si[order], targets[order], p[order]
     starts, ends = group_bounds(si)
