@@ -207,6 +207,8 @@ def target_vectors(folder: Path, split: str) -> np.ndarray:
 
 def load_side(folder: Path, split: str, sources: tuple[int, ...]) -> tuple[pl.DataFrame, np.ndarray]:
     ids = pl.concat([pl.read_parquet(folder / f"{split}_source{i}_ids.parquet") for i in sources])
+    if sources == (2, 3):
+        return ids, target_vectors(folder, split)
     vectors = np.concatenate([np.load(folder / f"{split}_source{i}.npy", mmap_mode="r") for i in sources])
     return ids, vectors
 
