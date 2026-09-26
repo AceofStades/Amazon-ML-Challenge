@@ -61,6 +61,14 @@ uv run python src/utils_validate_submission.py --matching output/matching_result
 `output/matching_results.tsv` is the leaderboard upload. `output/candidate_pairs.tsv` lists exactly the pairs the
 final matcher scored. `docs/experiments.md` records every holdout and leaderboard result.
 
+## Processed data (private Kaggle dataset)
+
+[aceofstades/amzn-er-processed](https://www.kaggle.com/datasets/aceofstades/amzn-er-processed) holds the processed
+artifacts: normalized records, every candidate pair with its features (137M train, 108M test pairs), stage-1,
+cross-encoder and blend scores, and row-to-ID maps. It is private; ask the owner for collaborator access, then run
+`kaggle datasets download aceofstades/amzn-er-processed`, or attach it as input to a Kaggle notebook. The dataset's
+README explains the file names and the `si`/`ti` row conventions.
+
 ## Method in brief
 
 - **Normalization**: case folding, a learned dictionary that maps Devanagari, Bengali, Tamil, Telugu, Kannada,

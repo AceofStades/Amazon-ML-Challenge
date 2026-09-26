@@ -9,3 +9,4 @@ models/
 logs/
 kaggle/data/
 kaggle/data_pairs/
+kaggle/processed/
