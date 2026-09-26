@@ -52,3 +52,15 @@ on the same street a few doors away ("Williams Templeton" 2212 vs "Williams Cent
 "Williams Tempoettron Corp" 2217). Each decoy brings several records that share its own house number,
 while a house-number typo on a true record stays alone. Test has about twice the decoy density of
 training, so stage 2 gets explicit house-cluster features instead of relying on the training prior.
+
+## Label-shift correction (calibrate.py, per-bin)
+
+Holdout positives per entity per score bin are assumed to carry over to test (the top bins, p >= 0.99,
+agree to within 1%: US a=1.011, India a=1.005, France a=0.957 against pooled shapes). Extra test pairs in a
+bin are counted as negatives, so posterior(bin) = a * n1(bin) / m(bin), made monotone. US corrected
+posteriors: raw 0.6 -> 0.22, raw 0.9 -> 0.54, raw 0.97 -> 0.76, raw >= 0.99 -> 1.0.
+
+| Version | Matches | US mean k | India mean k | France mean k | Leaderboard |
+|---|---|---|---|---|---|
+| v3 legal | 5,985,926 | 3.53 | 3.42 | 3.38 | 0.960932 |
+| v3 legal + per-bin correction | 5,624,024 | 3.23 | 3.34 | 2.99 | pending |

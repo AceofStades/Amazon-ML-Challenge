@@ -60,6 +60,49 @@ def fit(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: float, bi
     return result
 
 
+def per_bin(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: float, bins: int,
+            top_p: float = 0.99) -> dict:
+    """Positives per entity keep their holdout density (scaled by a, fitted on the top
+    bins); every extra test pair in a bin is a negative. Posterior per bin is
+    a * n1(b) / m(b), made non-decreasing in the score."""
+    edges = np.linspace(logit(np.array([min_p]))[0], logit(np.array([0.999]))[0], bins)
+    pooled = histograms(holdout[column].to_numpy(), holdout["label"].to_numpy().astype(float), edges,
+                        holdout["si"].n_unique())
+    top = np.flatnonzero(np.r_[-np.inf, edges] >= logit(np.array([top_p]))[0])
+    result = {}
+    for country in sorted(test["country"].unique().to_list()):
+        h = holdout.filter(pl.col("country") == country)
+        n1, _ = (histograms(h[column].to_numpy(), h["label"].to_numpy().astype(float), edges, h["si"].n_unique())
+                 if h.height else pooled)
+        t = test.filter(pl.col("country") == country)
+        m = histograms(t[column].to_numpy(), None, edges, t["si"].n_unique())
+        a = float(m[top].sum() / max(n1[top].sum(), 1e-9))
+        posterior = np.clip(a * n1 / np.maximum(m, 1e-9), 0, 1)
+        posterior[0] = min(posterior[0], posterior[1])
+        posterior = np.maximum.accumulate(posterior)
+        result[country] = {"a": a, "edges": edges.tolist(), "posterior": posterior.round(4).tolist()}
+        print(country, f"a={a:.3f}", "posterior by bin:", np.round(posterior[1:], 2).tolist(), flush=True)
+    return result
+
+
+def apply_per_bin(frame: pl.DataFrame, column: str, fits: dict, min_p: float) -> pl.DataFrame:
+    parts = []
+    for country, group in frame.group_by("country", maintain_order=True):
+        fit_ = fits.get(country[0])
+        if fit_ is None:
+            parts.append(group)
+            continue
+        edges = np.asarray(fit_["edges"])
+        posterior = np.asarray(fit_["posterior"])
+        # Interpolate between bin centres in logit space; bin 0 is below min_p.
+        centres = np.r_[edges[0] - 1.0, (edges[:-1] + edges[1:]) / 2, edges[-1] + 1.0]
+        scores = group[column].to_numpy()
+        adjusted = np.interp(logit(scores), centres, posterior)
+        adjusted = np.where(scores >= min_p, adjusted, np.minimum(scores, adjusted))
+        parts.append(group.with_columns(pl.Series(column, adjusted.astype(np.float32))))
+    return pl.concat(parts)
+
+
 def apply(frame: pl.DataFrame, column: str, fits: dict, min_p: float) -> pl.DataFrame:
     multiplier = pl.col("country").replace_strict(
         {k: v["odds_multiplier"] for k, v in fits.items()}, default=1.0, return_dtype=pl.Float64)
@@ -78,13 +121,19 @@ def main() -> None:
     parser.add_argument("--min-p", type=float, default=0.02)
     parser.add_argument("--bins", type=int, default=25)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--mode", choices=("odds", "per-bin"), default="per-bin")
     args = parser.parse_args()
     countries = {split: pl.read_parquet(args.embed_dir / f"{split}_source1_ids.parquet")
                  .select("country").with_row_index("si") for split in ("train", "test")}
     holdout = pl.read_parquet(args.holdout).join(countries["train"], on="si")
     test = pl.read_parquet(args.test).join(countries["test"], on="si")
-    fits = fit(holdout, test, args.column, args.min_p, args.bins)
-    apply(test, args.column, fits, args.min_p).drop("country").write_parquet(args.output)
+    if args.mode == "odds":
+        fits = fit(holdout, test, args.column, args.min_p, args.bins)
+        adjusted = apply(test, args.column, fits, args.min_p)
+    else:
+        fits = per_bin(holdout, test, args.column, args.min_p, args.bins)
+        adjusted = apply_per_bin(test, args.column, fits, args.min_p)
+    adjusted.drop("country").write_parquet(args.output)
     args.output.with_suffix(".json").write_text(json.dumps(fits, indent=1))
     print(f"wrote {args.output}", flush=True)
 
