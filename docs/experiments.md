@@ -147,3 +147,16 @@ context, both fitted on US/India where names are distinctive, over-trust name ag
 SARL | Rue du Curoir" for S1 at 27 Rue du Duc: p1 0.07, blend 0.88). Rule: countries present in the labelled holdout
 use the blend; any other country uses stage 1; each group is calibrated against its own scorer's holdout.
 Projected overall F0.5: 0.991. Submission hybrid: 5,758,810 matches.
+
+## v6: stage 1 with address-wide pairwise house features
+
+Seven pairwise features: Source 1 house number found among the target's address numbers (and the reverse), log gap
+and digit-difference shape to the closest target number. Blend with name-genericness inputs (holdout logloss
+0.0483 on cross-encoder pairs).
+
+| Scores | US | India | France |
+|---|---|---|---|
+| v6 stage 1 | 0.9782 | 0.9856 | 0.9737 |
+| v6 blend + name inputs | 0.9948 | 0.9958 | 0.9185 |
+
+Hybrid v6 (blend for labelled countries, stage 1 otherwise): projected 0.9921; 5,766,877 matches.
