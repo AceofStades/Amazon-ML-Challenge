@@ -10,7 +10,8 @@ import sys
 from pathlib import Path
 
 base = Path(__file__).resolve().parent
-n, user, model, seed = int(sys.argv[1]), sys.argv[2], sys.argv[3], int(sys.argv[4])
+n, user, model, seed = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+pairs_file = f"ce_train_pairs_hard_seed{seed}.parquet" if seed.isdigit() else f"ce_train_pairs_{seed}.parquet"
 budget = float(sys.argv[5]) if len(sys.argv) > 5 else 7.5
 train, score = base / f"ce_train_{n}", base / f"ce_score_{n}"
 for path in (train, score):
@@ -21,12 +22,12 @@ shutil.copytree(base / "ce_score_4", score)
 p = train / "ce_train.py"
 s = p.read_text()
 s = s.replace('"model": "FacebookAI/xlm-roberta-large",', f'"model": "{model}",')
-s = s.replace('find("ce_train_pairs_hard_seed61.parquet")', f'find("ce_train_pairs_hard_seed{seed}.parquet")')
+s = s.replace('find("ce_train_pairs_hard_seed61.parquet")', f'find("{pairs_file}")')
 s = s.replace("MIT-licensed FacebookAI/xlm-roberta-large;", f"base model {model};")
 s = s.replace('"budget_hours": 7.5,', f'"budget_hours": {budget},')
 s = s.replace("self.model = AutoModel.from_pretrained(name, add_pooling_layer=False)\n",
               "self.model = AutoModel.from_pretrained(name, add_pooling_layer=False, torch_dtype=torch.float32)\n")
-assert model in s and f"seed{seed}" in s and "torch.float32" in s
+assert model in s and pairs_file in s and "torch.float32" in s
 p.write_text(s)
 m = json.loads((train / "kernel-metadata.json").read_text())
 m.update(id=f"{user}/amzn-ce-train-{n}", title=f"amzn-ce-train-{n}",
@@ -36,4 +37,4 @@ m = json.loads((score / "kernel-metadata.json").read_text())
 m.update(id=f"{user}/amzn-ce-score-{n}", title=f"amzn-ce-score-{n}", kernel_sources=[f"{user}/amzn-ce-train-{n}"],
          dataset_sources=["aceofstades/amzn-er-data"])
 (score / "kernel-metadata.json").write_text(json.dumps(m, indent=2))
-print(f"kernel {n}: {user} {model} seed {seed} budget {budget}h")
+print(f"kernel {n}: {user} {model} {pairs_file} budget {budget}h")
