@@ -36,6 +36,18 @@ def calibrated(holdout: pl.DataFrame, test: pl.DataFrame, column: str, cache_dir
         return apply_per_bin(live, column, per_bin(holdout, live, column, 0.02, 25), 0.02)
     live = house_segments(live, cache_dir, "test")
     held = house_segments(holdout, cache_dir, "train")
+    if mode == "segment-clean":
+        # Fit the posterior curves without the decoy-heavy name classes (one-word swaps to a common word, single
+        # made-up brands): the France rules handle those, and their mass would depress every other mid-score pair.
+        def flag(frame: pl.DataFrame, split: str) -> pl.Series:
+            gen = pl.read_parquet(cache_dir / "gen" / f"{split}.parquet",
+                                  columns=["si", "ti", "g_swap_common", "g_brand1"])
+            joined = frame.select("si", "ti").join(gen, on=["si", "ti"], how="left", maintain_order="left")
+            return ((joined["g_swap_common"].fill_null(0) == 1) | (joined["g_brand1"].fill_null(0) == 1)).alias("decoyish")
+        live = live.with_columns(flag(live, "test"))
+        held = held.with_columns(flag(held, "train"))
+        fits = per_segment(held.filter(~pl.col("decoyish")), live.filter(~pl.col("decoyish")), column, 0.02, 25)
+        return apply_per_segment(live.drop("decoyish"), column, fits, 0.02)
     if mode == "segment-noaddr":
         from .calibrate import missing_segments
         live = missing_segments(live, cache_dir, "test")
@@ -56,7 +68,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("output/hybrid"))
     parser.add_argument("--calibration", choices=("segment", "segment-name", "segment-noaddr"), default="segment",
                         help="Label-shift correction for countries with labels")
-    parser.add_argument("--fallback-calibration", choices=("segment", "segment-name", "segment-noaddr", "uniform", "none"),
+    parser.add_argument("--fallback-calibration", choices=("segment", "segment-name", "segment-noaddr", "segment-clean", "uniform", "none"),
                         default="segment",
                         help="Label-shift correction for countries without labels")
     parser.add_argument("--fallback-odds", type=float, default=1.0,
