@@ -20,7 +20,12 @@ import xgboost as xgb
 
 from .v3 import id_frames
 
-FEATURES = ["logit_p1", "ce_logit"]
+BASE = ["logit_p1", "ce_logit"]
+HOUSE = ["house_equal", "house_conflict"]
+TT = ["tt_anchor", "tt_conf_mean", "tt_conf_max", "tt_low_max", "tt_mass", "tt_rank_in_s"]
+
+
+FEATURES = BASE
 
 
 def with_features(frame: pl.DataFrame) -> pl.DataFrame:
@@ -28,11 +33,27 @@ def with_features(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.with_columns((p / (1 - p)).log().alias("logit_p1"))
 
 
-def load(model_dir: Path, ce_dir: Path, split: str) -> pl.DataFrame:
+def load(model_dir: Path, ce_dir: Path, split: str, extras: set[str], cache_dir: Path = Path("cache")) -> pl.DataFrame:
     p1 = pl.scan_parquet(model_dir / f"{split}_p1" / "*.parquet")
     ce = pl.scan_parquet(ce_dir / f"{split}_scores.parquet").with_columns(
         pl.col("si").cast(pl.UInt32), pl.col("ti").cast(pl.UInt32))
-    return with_features(p1.join(ce, on=["si", "ti"], how="left").collect())
+    frame = p1.join(ce, on=["si", "ti"], how="left").collect()
+    if "tt" in extras:
+        tt = pl.read_parquet(cache_dir / "tt" / f"{split}_aggregates.parquet").with_columns(
+            pl.col("si").cast(pl.UInt32), pl.col("ti").cast(pl.UInt32))
+        frame = frame.join(tt, on=["si", "ti"], how="left")
+    if "house" in extras:
+        from .train_v4 import house_numbers
+        s_house, _, t_numbers = house_numbers(cache_dir, split)
+        live = frame.filter(pl.col("ce_logit").is_not_null()).select("si", "ti")
+        hs = pl.Series(s_house[live["si"].to_numpy()])
+        nums = t_numbers.gather(live["ti"].to_numpy())
+        relation = pl.DataFrame({"hs": hs, "nums": nums}).select(
+            ((pl.col("hs") != "") & pl.col("nums").list.contains(pl.col("hs"))).cast(pl.Float32).alias("house_equal"),
+            ((pl.col("hs") != "") & (pl.col("nums").list.len() > 0)
+             & ~pl.col("nums").list.contains(pl.col("hs"))).cast(pl.Float32).alias("house_conflict"))
+        frame = frame.join(pl.concat([live, relation], how="horizontal"), on=["si", "ti"], how="left")
+    return with_features(frame)
 
 
 def labels(frame: pl.DataFrame, embed_dir: Path, truth: Path) -> pl.DataFrame:
@@ -54,10 +75,14 @@ def main() -> None:
     parser.add_argument("--embed-dir", type=Path, default=Path("cache/embeddings"))
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/v4_blend"))
+    parser.add_argument("--extras", default="", help="comma list: house, tt")
     args = parser.parse_args()
+    extras = {e for e in args.extras.split(",") if e}
+    global FEATURES
+    FEATURES = BASE + (HOUSE if "house" in extras else []) + (TT if "tt" in extras else [])
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    train = load(args.model_dir, args.ce_dir, "train")
+    train = load(args.model_dir, args.ce_dir, "train", extras)
     s_ids, _ = id_frames(args.embed_dir, "train")
     buckets = duckdb.sql("SELECT si, (hash(entity_id) % 1000)::INT AS bucket FROM s_ids").pl()
     train = train.join(buckets.with_columns(pl.col("si").cast(pl.UInt32)), on="si").filter(pl.col("bucket") < 100)
@@ -74,6 +99,7 @@ def main() -> None:
                       matrix(fit_rows), num_boost_round=1000, evals=[(matrix(valid_rows), "valid")],
                       early_stopping_rounds=30, verbose_eval=100)
     model.save_model(args.output_dir / "blend.json")
+    (args.output_dir / "blend_meta.json").write_text(json.dumps({"features": FEATURES}))
     best = model.best_iteration
 
     def blend(frame: pl.DataFrame) -> pl.DataFrame:
@@ -87,7 +113,7 @@ def main() -> None:
     holdout = blend(train.filter(valid_mask))
     holdout.select("si", "ti", "p1", "p3", "label").rename({"p3": "p2"}).write_parquet(
         args.output_dir / "valid_predictions.parquet")
-    test = blend(load(args.model_dir, args.ce_dir, "test"))
+    test = blend(load(args.model_dir, args.ce_dir, "test", extras))
     test.select("si", "ti", "p1", pl.col("p3").alias("p2")).with_columns(pl.lit(0, pl.Int16).alias("bucket")).write_parquet(
         args.output_dir / "test_scored.parquet")
     (args.output_dir / "evaluation.json").write_text(json.dumps({"best": "p2_o2o_expected_0.05_0.0"}))
