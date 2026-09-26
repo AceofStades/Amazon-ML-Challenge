@@ -65,7 +65,9 @@ def training_pairs(args: argparse.Namespace) -> pl.DataFrame:
              .select("si", "ti", pl.lit(1.0, pl.Float32).alias("label")))
     # Also add every true match of the chosen entities, retrieved or not.
     positives = truth.filter(pl.col("si").is_in(chosen.implode())).select("si", "ti")
-    pairs = pl.concat([knn, positives]).unique()
+    cast = [pl.col("si").cast(pl.Int64), pl.col("ti").cast(pl.Int64)]
+    truth = truth.with_columns(cast)
+    pairs = pl.concat([knn.with_columns(cast), positives.with_columns(cast)]).unique()
     pairs = pairs.join(truth, on=["si", "ti"], how="left").with_columns(pl.col("label").fill_null(0.0))
     print(f"cross-encoder pairs {pairs.height:,}, positive rate {pairs['label'].mean():.3f}", flush=True)
     return pairs.sample(fraction=1.0, shuffle=True, seed=2)
