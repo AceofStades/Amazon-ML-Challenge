@@ -23,6 +23,8 @@ from .v3 import id_frames
 BASE = ["logit_p1", "ce_logit"]
 HOUSE = ["house_equal", "house_conflict"]
 TT = ["tt_anchor", "tt_conf_mean", "tt_conf_max", "tt_low_max", "tt_mass", "tt_rank_in_s"]
+NAME = ["s_name_dup", "t_name_dup", "s_name_in_targets", "name_idf_cos", "name_idf_max_shared",
+        "address_idf_cos", "house_match", "house_conflict"]
 
 
 FEATURES = BASE
@@ -38,6 +40,12 @@ def load(model_dir: Path, ce_dir: Path, split: str, extras: set[str], cache_dir:
     ce = pl.scan_parquet(ce_dir / f"{split}_scores.parquet").with_columns(
         pl.col("si").cast(pl.UInt32), pl.col("ti").cast(pl.UInt32))
     frame = p1.join(ce, on=["si", "ti"], how="left").collect()
+    if "name" in extras:
+        import glob
+        live = frame.filter(pl.col("ce_logit").is_not_null()).select("si", "ti")
+        parts = [pl.read_parquet(path, columns=["si", "ti", *NAME]).join(live, on=["si", "ti"], how="semi")
+                 for path in sorted(glob.glob(str(cache_dir / "v3" / split / "part*.parquet")))]
+        frame = frame.join(pl.concat(parts), on=["si", "ti"], how="left")
     if "tt" in extras:
         tt = pl.read_parquet(cache_dir / "tt" / f"{split}_aggregates.parquet").with_columns(
             pl.col("si").cast(pl.UInt32), pl.col("ti").cast(pl.UInt32))
@@ -79,7 +87,8 @@ def main() -> None:
     args = parser.parse_args()
     extras = {e for e in args.extras.split(",") if e}
     global FEATURES
-    FEATURES = BASE + (HOUSE if "house" in extras else []) + (TT if "tt" in extras else [])
+    FEATURES = (BASE + (HOUSE if "house" in extras else []) + (TT if "tt" in extras else [])
+                + (NAME if "name" in extras else []))
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     train = load(args.model_dir, args.ce_dir, "train", extras)
