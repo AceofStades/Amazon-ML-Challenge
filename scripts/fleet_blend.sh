@@ -8,7 +8,8 @@ EXTRA=""
 for pair in b=cache/ce_b c=cache/ce_c L=cache/ce_large base=cache/ce_base basehard=cache/ce_base_hard basehard2=cache/ce_base_hard2 \
             L2=cache/ce_large2 L3=cache/ce_large3 L5=cache/ce_large5 L10=cache/ce_large10 \
             bge=cache/ce_bge bge6=cache/ce_bge6 bge11=cache/ce_bge11 xlmr7=cache/ce_xlmr7 xlmr12=cache/ce_xlmr12 \
-            e5i8=cache/ce_e5i8 e5i13=cache/ce_e5i13 bgem3=cache/ce_bgem3; do
+            e5i8=cache/ce_e5i8 e5i13=cache/ce_e5i13 bgem3=cache/ce_bgem3 \
+            labse14=cache/ce_labse14 bgem3_15=cache/ce_bgem3_15 L16=cache/ce_large16 bge17=cache/ce_bge17; do
     dir=${pair#*=}
     if [ -f "$dir/train_scores.parquet" ] && [ -f "$dir/test_scores.parquet" ]; then
         EXTRA="$EXTRA --extra-ce $pair"

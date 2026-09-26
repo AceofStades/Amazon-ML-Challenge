@@ -1,0 +1,16 @@
+{
+  "id": "ayj2411/amzn-ce-train-15",
+  "title": "amzn-ce-train-15",
+  "code_file": "ce_train.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "aceofstades/amzn-er-data",
+    "ayj2411/amzn-er-hard"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
