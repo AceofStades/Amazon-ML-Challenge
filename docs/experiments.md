@@ -298,3 +298,23 @@ Accepted US pairs with conflicting house numbers are mostly dropped-digit typos 
 15911 vs 5911, 1203 vs 203). Accepted France conflicts are unrelated numbers (129 vs 445, 8 vs 165, 30 vs 289),
 the decoy signature; treating one dropped digit as a typo changes only 110 of 9,321 France drops. Candidate
 submission: calibrated France + recall rule + drop of non-typo France conflicts (5,836,456 matches).
+
+## France error analysis without labels
+
+- Every labelled country has the same match count: 3.46 true matches per Source 1 entity (US 3.459, India 3.465,
+  5.6% singletons). The hybrid predicts 3.39 per entity for US and India but only 3.20 for France.
+- France true records are cleaner than training ones: 1.85 identical-name, same-address targets per entity against
+  1.14 in training, with fewer typos and added words.
+- France rejects 0.30 pairs per entity with raw p1 >= 0.5, mostly same-address records whose name has one word
+  swapped (0.078) or an unrelated name (0.089).
+- Training labels by how the name changed, same house number and street, one word replaced in place:
+  by a filler (center, services, service, partners) 98.7% true; by a rare or garbled word 95.9% true;
+  by a common vocabulary word (20+ Source 1 names) only 45.3% true, and 5.1% at another house number.
+- France gray swaps replace a generic type word by another (club, ecole, comite, amicale, sportive): the vocabulary
+  of the France decoys a few doors away. Confident France swaps use services and france instead.
+- Unrelated names at the same address: acronyms that spell the Source 1 initials are 99.9% true in training and
+  12 times more frequent in France, where stage 1 gives them only 0.75; single made-up brand words are 80% true in
+  training but 2.4 times over-represented in France, so most France ones are decoys.
+- The model has no feature for the kind of word change, so gen_features.py adds them: exact/add/drop/typo/swap
+  (in place or moved), the swapped-in word's class (filler, common, rare), log document frequencies of missing and
+  extra words per country, acronym/domain/alias with initials consistency, and single-brand names.
