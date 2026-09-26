@@ -255,3 +255,21 @@ pairs get posterior 1.0 after clipping and the monotone pass, e.g. US conflictin
 
 Second large cross-encoder (seed-21 entities) on Kaggle; e5-base cross-encoder (MIT, 278M, seed-4 entities) on the
 local GPU at 368 pairs/s.
+
+## Leaderboard: large cross-encoder blend and France decisions
+
+| Submission | US/India scorer | France decisions | Leaderboard |
+|---|---|---|---|
+| hybrid v7 full | stage 1 + 2 small cross-encoders | stage 1, segment-calibrated (tie bug) | 0.984806 |
+| hybrid L, France raw | + third small + large cross-encoder | stage 1, uncalibrated | 0.983476 |
+| hybrid L, France calibrated | + third small + large cross-encoder | stage 1, segment-calibrated | 0.985292 (rank 77) |
+
+The large cross-encoder plus the tie fix is worth +0.0005. Raw France decisions (+52k pairs, 0.2 per entity) cost
+0.0018 overall, i.e. about 1.2 points of France F0.5, so the extra pairs were only about half true.
+
+## France recall rule (france_rule.py)
+
+Keep the calibrated France decisions and add back a raw-only pair only at the Source 1 address (no house conflict)
+when the target name is an acronym of the Source 1 initials, a web domain carrying a Source 1 word or initials,
+a DBA/f.k.a. alias, a near-typo (compact Jaro-Winkler >= 0.92) or the Source 1 core name plus extra words.
+Adds 18,399 pairs (acronym 6,653; domain 2,986; typo/containment 8,726; alias 34), which read as nearly all true.

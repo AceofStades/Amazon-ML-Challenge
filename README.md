@@ -61,7 +61,7 @@ uv run python -m amzn.kaggle_export
 # 7. Pairwise blend (stage 1 + cross-encoders), per-country scorer choice, calibration, decoding.
 uv run python -m amzn.blend --model-dir output/v7 --extras name,full --extra-ce b=cache/ce_b \
     --extra-ce c=cache/ce_c --extra-ce L=cache/ce_large --depth 6 --output-dir output/blend
-uv run python -m amzn.hybrid --blend-dir output/blend --fallback-calibration none --output-dir output
+uv run python -m amzn.hybrid --blend-dir output/blend --output-dir output
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
     --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids
