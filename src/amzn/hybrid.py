@@ -26,8 +26,15 @@ from .train_v4 import one_to_one
 from .v3 import id_frames
 
 
-def calibrated(holdout: pl.DataFrame, test: pl.DataFrame, column: str, cache_dir: Path) -> pl.DataFrame:
-    live = house_segments(test.filter(pl.col(column) >= 0.001), cache_dir, "test")
+def calibrated(holdout: pl.DataFrame, test: pl.DataFrame, column: str, cache_dir: Path,
+               mode: str = "segment") -> pl.DataFrame:
+    live = test.filter(pl.col(column) >= 0.001)
+    if mode == "none":
+        return live
+    if mode == "uniform":
+        from .calibrate import apply_per_bin, per_bin
+        return apply_per_bin(live, column, per_bin(holdout, live, column, 0.02, 25), 0.02)
+    live = house_segments(live, cache_dir, "test")
     fits = per_segment(house_segments(holdout, cache_dir, "train"), live, column, 0.02, 25)
     return apply_per_segment(live, column, fits, 0.02)
 
@@ -38,6 +45,8 @@ def main() -> None:
     parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
     parser.add_argument("--embed-dir", type=Path, default=Path("cache/embeddings"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/hybrid"))
+    parser.add_argument("--fallback-calibration", choices=("segment", "uniform", "none"), default="segment",
+                        help="Label-shift correction for countries without labels")
     parser.add_argument("--fallback-dir", type=Path,
                         help="Run whose stage-1 scores serve countries without labels (default: --blend-dir)")
     args = parser.parse_args()
@@ -62,7 +71,7 @@ def main() -> None:
                      .join(raw, on=["si", "ti"]))
     if unknown.height:
         raw = unknown.select("si", "ti", pl.col("p1").alias("raw"))
-        parts.append(calibrated(fallback_holdout, unknown, "p1", args.cache_dir)
+        parts.append(calibrated(fallback_holdout, unknown, "p1", args.cache_dir, args.fallback_calibration)
                      .select("si", "ti", pl.col("p1").alias("p")).join(raw, on=["si", "ti"]))
     scored = one_to_one(pl.concat(parts), "p", tie_break="raw")
     chosen = decode(scored["si"].to_numpy(), scored["ti"].to_numpy(), scored["p"].to_numpy(), "expected", 0.05, 0.0)
