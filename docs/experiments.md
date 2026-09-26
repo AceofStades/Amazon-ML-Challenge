@@ -590,3 +590,19 @@ has 2,165 additions. Existing target assignments are preserved. The exact
 draft's additions all occur in the candidate file. Neither variant is staged
 or submitted; its small plausible gain does not merit a separate submission
 slot. Python compilation passes.
+
+## Shortened-address recall audit (2026-09-27)
+
+`scripts/france_audit_shortaddr.py` examines safe-name, unassigned France
+candidates with equal first house numbers and address cosine below 0.8. Run
+under the shared lock with two CPU threads. Results are saved in
+`output/france_audit_shortaddr.parquet` and
+`logs/france_audit_shortaddr.log`.
+
+The pool contains 9,595 pairs. Only 182 have target address-token coverage at
+least 0.9, and only 98 of those also have p1 at least 0.5. Asymmetric address
+coverage therefore offers a small restoration pool, not the large missing
+France recall hoped for. The audit instead finds 104 additional p1 at least
+0.99 candidates affected by the literal `ndeg` prefix, including 93 exact
+names and 33 with address cosine below 0.6. Some overlap the equality draft;
+do not add the pool sizes together. No decisions changed. Compilation passes.
