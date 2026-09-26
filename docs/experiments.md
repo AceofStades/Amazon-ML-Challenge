@@ -131,3 +131,19 @@ the scored pairs: 0.0504 (stage 1 alone 0.0729).
 | stage 1 + cross-encoder blend | 0.99040 | 0.98287 |
 
 Submission blend_segcal: 5,718,944 matches; US 3.37, India 3.38, France 2.89 per entity.
+
+## Per-country projections and the unlabelled-country fallback (amzn.hybrid)
+
+Estimated test F0.5 per country (per-segment truth model):
+
+| Scores | US | India | France |
+|---|---|---|---|
+| v4 stage 1 | 0.9727 | 0.9842 | 0.9725 |
+| v4 stage 2 | 0.9777 | 0.9828 | 0.9099 |
+| stage 1 + cross-encoder blend | 0.9931 | 0.9952 | 0.9180 |
+
+France names are generic ("Lille Ecole SARL", "Roubaix Union" exist many times) and the cross-encoder and stage-2
+context, both fitted on US/India where names are distinctive, over-trust name agreement there (e.g. "Roubaix Union
+SARL | Rue du Curoir" for S1 at 27 Rue du Duc: p1 0.07, blend 0.88). Rule: countries present in the labelled holdout
+use the blend; any other country uses stage 1; each group is calibrated against its own scorer's holdout.
+Projected overall F0.5: 0.991. Submission hybrid: 5,758,810 matches.
