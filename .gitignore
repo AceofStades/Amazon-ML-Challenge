@@ -8,3 +8,4 @@ cache/
 models/
 logs/
 kaggle/data/
+kaggle/data_pairs/
