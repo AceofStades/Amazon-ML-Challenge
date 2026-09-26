@@ -110,7 +110,15 @@ def create_features(
                             list_unique(regexp_extract_all(t.address, '[0-9]+')) -
                             list_unique(list_intersect(regexp_extract_all(s.address, '[0-9]+'),
                                                        regexp_extract_all(t.address, '[0-9]+'))), 1)
-                   ELSE 0 END AS address_number_jaccard
+                   ELSE 0 END AS address_number_jaccard,
+               CASE WHEN s.house <> '' AND t.house <> ''
+                    THEN levenshtein(s.house, t.house) ELSE -1 END::FLOAT AS house_edit,
+               CASE WHEN s.house <> '' AND t.house <> ''
+                    THEN (starts_with(s.house, t.house) OR starts_with(t.house, s.house)
+                          OR ends_with(s.house, t.house) OR ends_with(t.house, s.house))::INT
+                    ELSE -1 END::FLOAT AS house_affix,
+               CASE WHEN s.house <> '' AND t.house <> ''
+                    THEN abs(length(s.house) - length(t.house)) ELSE -1 END::FLOAT AS house_length_diff
                {seed_fields}
         FROM {candidates} c
         JOIN {split}_source1 s ON c.source1_entity_id = s.entity_id
