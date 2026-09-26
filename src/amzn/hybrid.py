@@ -55,6 +55,8 @@ def main() -> None:
     parser.add_argument("--fallback-calibration", choices=("segment", "segment-name", "uniform", "none"),
                         default="segment",
                         help="Label-shift correction for countries without labels")
+    parser.add_argument("--fallback-odds", type=float, default=1.0,
+                        help="Multiply calibrated odds for countries without labels (below 1 = stricter)")
     parser.add_argument("--fallback-dir", type=Path,
                         help="Run whose stage-1 scores serve countries without labels (default: --blend-dir)")
     args = parser.parse_args()
@@ -80,8 +82,14 @@ def main() -> None:
                      .join(raw, on=["si", "ti"]))
     if unknown.height:
         raw = unknown.select("si", "ti", pl.col("p1").alias("raw"))
-        parts.append(calibrated(fallback_holdout, unknown, "p1", args.cache_dir, args.fallback_calibration)
-                     .select("si", "ti", pl.col("p1").alias("p")).join(raw, on=["si", "ti"]))
+        fallback = (calibrated(fallback_holdout, unknown, "p1", args.cache_dir, args.fallback_calibration)
+                    .select("si", "ti", pl.col("p1").alias("p")))
+        if args.fallback_odds != 1.0:
+            # Stricter decisions for countries without labels: scale the posterior odds.
+            odds = pl.col("p") / (1 - pl.col("p")).clip(1e-9)
+            fallback = fallback.with_columns(
+                (odds * args.fallback_odds / (1 + odds * args.fallback_odds)).alias("p"))
+        parts.append(fallback.join(raw, on=["si", "ti"]))
     scored = one_to_one(pl.concat(parts), "p", tie_break="raw")
     chosen = decode(scored["si"].to_numpy(), scored["ti"].to_numpy(), scored["p"].to_numpy(), "expected", 0.05, 0.0)
 
