@@ -10,6 +10,7 @@ import numpy as np
 import polars as pl
 import xgboost as xgb
 
+from .embed import target_vectors
 from .train_v3 import decode, stage2_context
 from .v3 import id_frames
 
@@ -54,7 +55,7 @@ def main() -> None:
         model2 = xgb.Booster()
         model2.load_model(args.model_dir / "stage2.json")
         model2.set_param({"device": "cuda"})
-        t_vec = np.concatenate([np.load(args.embed_dir / f"test_source{i}.npy", mmap_mode="r") for i in (2, 3)])
+        t_vec = target_vectors(args.embed_dir, "test")
         scored = []
         parts = sorted((args.cache_dir / "v3" / "test").glob("part*.parquet"))
         for n, path in enumerate(parts):

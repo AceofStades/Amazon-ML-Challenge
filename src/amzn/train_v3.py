@@ -19,6 +19,8 @@ import polars as pl
 import torch
 import xgboost as xgb
 
+from .embed import target_vectors
+
 
 ID_COLUMNS = ("source1_entity_id", "candidate_entity_id", "si", "ti")
 STAGE2_EXTRA = (
@@ -214,7 +216,7 @@ def main() -> None:
         model.save_model(args.output_dir / f"stage1_fold{f}.json")
         print(f"stage1 fold {f} best iteration {model.best_iteration}", flush=True)
 
-    t_vec = np.concatenate([np.load(args.embed_dir / f"train_source{i}.npy", mmap_mode="r") for i in (2, 3)])
+    t_vec = target_vectors(args.embed_dir, "train")
     train2 = stage2_context(train, oof, t_vec)
     valid2 = stage2_context(valid, valid_p1, t_vec)
     names2 = feature_names(frame) + list(STAGE2_EXTRA)

@@ -18,6 +18,7 @@ import numpy as np
 import polars as pl
 import torch
 
+from .embed import target_vectors
 from .blocking import connect
 from .features import create_features
 
@@ -275,7 +276,7 @@ def build_features(args: argparse.Namespace) -> None:
     print("exported raw partitions", flush=True)
     s_ids, t_ids = id_frames(folder, args.split)
     s_vec = np.load(folder / f"{args.split}_source1.npy", mmap_mode="r")
-    t_vec = np.concatenate([np.load(folder / f"{args.split}_source{i}.npy", mmap_mode="r") for i in (2, 3)])
+    t_vec = target_vectors(folder, args.split)
     knn = pl.scan_parquet(folder / f"{args.split}_knn.parquet")
     s_stats = knn.group_by("q").agg(
         pl.col("cosine").filter(pl.col("rank") == 1).first().alias("s_top_cos"),

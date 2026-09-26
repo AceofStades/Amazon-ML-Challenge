@@ -186,6 +186,25 @@ def encode(args: argparse.Namespace) -> None:
         print(f"Encoded {args.split} source {source}: {len(frame):,}", flush=True)
 
 
+def target_vectors(folder: Path, split: str) -> np.ndarray:
+    """Memory-mapped Source 2 + Source 3 embeddings in target (ti) order."""
+    path = folder / f"{split}_targets.npy"
+    if not path.exists():
+        parts = [np.load(folder / f"{split}_source{i}.npy", mmap_mode="r") for i in (2, 3)]
+        combined = np.lib.format.open_memmap(path.with_suffix(".tmp.npy"), mode="w+", dtype=parts[0].dtype,
+                                             shape=(sum(len(p) for p in parts), parts[0].shape[1]))
+        offset = 0
+        for part in parts:
+            for start in range(0, len(part), 1 << 20):
+                chunk = part[start:start + (1 << 20)]
+                combined[offset + start:offset + start + len(chunk)] = chunk
+            offset += len(part)
+        combined.flush()
+        del combined
+        path.with_suffix(".tmp.npy").rename(path)
+    return np.load(path, mmap_mode="r")
+
+
 def load_side(folder: Path, split: str, sources: tuple[int, ...]) -> tuple[pl.DataFrame, np.ndarray]:
     ids = pl.concat([pl.read_parquet(folder / f"{split}_source{i}_ids.parquet") for i in sources])
     vectors = np.concatenate([np.load(folder / f"{split}_source{i}.npy", mmap_mode="r") for i in sources])

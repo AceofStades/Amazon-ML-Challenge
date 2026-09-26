@@ -22,6 +22,7 @@ import numpy as np
 import polars as pl
 import xgboost as xgb
 
+from .embed import target_vectors
 from .train_v3 import (STAGE2_EXTRA, attach_labels, decode, feature_names, macro_f05,
                        stage2_context, truth_sets)
 from .v3 import id_frames
@@ -151,7 +152,7 @@ def stage2_frame(args, split: str, path: Path, comp: pl.DataFrame, t_vec: np.nda
 
 def train_stage2(args: argparse.Namespace) -> None:
     comp = competition(args, "train")
-    t_vec = np.concatenate([np.load(args.embed_dir / f"train_source{i}.npy", mmap_mode="r") for i in (2, 3)])
+    t_vec = target_vectors(args.embed_dir, "train")
     frames = []
     for path in partitions(args.cache_dir, "train"):
         frames.append(stage2_frame(args, "train", path, comp, t_vec, labels=True,
@@ -171,7 +172,7 @@ def score_stage2(args: argparse.Namespace, split: str) -> pl.DataFrame:
     comp = competition(args, split)
     meta = json.loads((args.model_dir / "stage2_meta.json").read_text())
     model = load_models(args.model_dir, "stage2.json")[0]
-    t_vec = np.concatenate([np.load(args.embed_dir / f"{split}_source{i}.npy", mmap_mode="r") for i in (2, 3)])
+    t_vec = target_vectors(args.embed_dir, split)
     scored = []
     for path in partitions(args.cache_dir, split):
         part = stage2_frame(args, split, path, comp, t_vec, labels=False)
