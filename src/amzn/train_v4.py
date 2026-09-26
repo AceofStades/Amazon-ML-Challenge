@@ -29,6 +29,52 @@ from .v3 import id_frames
 
 COMPETITION = ("t_p1_other_max", "t_p1_other_second", "t_claims50", "p1_minus_t_other",
                "p1_share_t", "t_candidates")
+HOUSE = ("t_house_known", "t_house_is_s", "t_house_size", "t_house_other_p1", "t_house_cluster_rank",
+         "s_house_size", "s_house_max_p1", "best_other_house_p1", "p1_minus_s_house_max")
+
+
+def house_numbers(cache_dir: Path, split: str) -> tuple[np.ndarray, np.ndarray]:
+    """Normalized first house number per record, in si and ti order ('' when absent)."""
+    def read(i: int) -> pl.Series:
+        return pl.read_csv(cache_dir / f"{split}_source{i}.tsv", separator="\t", quote_char=None,
+                           infer_schema=False, columns=["house"])["house"].fill_null("")
+    source1 = read(1)
+    targets = pl.concat([read(2), read(3)])
+    return source1.to_numpy(), targets.to_numpy()
+
+
+def house_context(part: pl.DataFrame, s_house: np.ndarray, t_house: np.ndarray) -> pl.DataFrame:
+    """Decoy entities sit a few doors away and bring several records sharing their own
+    house number; a typo on a true record leaves its house number alone in the group."""
+    frame = part.select("si", "ti", "p1").with_columns(
+        pl.Series("hs", s_house[part["si"].to_numpy()]), pl.Series("ht", t_house[part["ti"].to_numpy()]))
+    known = pl.col("ht") != ""
+    clusters = (frame.filter(known).group_by("si", "ht")
+                .agg(pl.len().alias("size"), pl.col("p1").max().alias("cmax"),
+                     pl.col("p1").top_k(2).min().alias("csecond"))
+                .with_columns(pl.col("cmax").rank("ordinal", descending=True).over("si").alias("crank")))
+    s_side = (frame.filter(known & (pl.col("ht") == pl.col("hs"))).group_by("si")
+              .agg(pl.len().alias("s_house_size"), pl.col("p1").max().alias("s_house_max_p1")))
+    other = (clusters.join(frame.select("si", "hs").unique("si"), on="si")
+             .filter(pl.col("ht") != pl.col("hs")).group_by("si")
+             .agg(pl.col("cmax").max().alias("best_other_house_p1")))
+    out = (frame.join(clusters, on=["si", "ht"], how="left").join(s_side, on="si", how="left")
+           .join(other, on="si", how="left")
+           .with_columns(
+               known.cast(pl.Float32).alias("t_house_known"),
+               (known & (pl.col("ht") == pl.col("hs"))).cast(pl.Float32).alias("t_house_is_s"),
+               pl.col("size").fill_null(0).cast(pl.Float32).alias("t_house_size"),
+               # Strongest other record in t's own house cluster.
+               pl.when(pl.col("size") > 1).then(
+                   pl.when(pl.col("p1") >= pl.col("cmax")).then(pl.col("csecond")).otherwise(pl.col("cmax")))
+               .otherwise(-1.0).alias("t_house_other_p1"),
+               pl.col("crank").fill_null(0).cast(pl.Float32).alias("t_house_cluster_rank"),
+               pl.col("s_house_size").fill_null(0).cast(pl.Float32),
+               pl.col("s_house_max_p1").fill_null(-1.0),
+               pl.col("best_other_house_p1").fill_null(-1.0),
+           )
+           .with_columns((pl.col("p1") - pl.col("s_house_max_p1")).alias("p1_minus_s_house_max")))
+    return part.with_columns(out.select(HOUSE))
 VALID = (50, 60)
 
 
@@ -140,26 +186,29 @@ def add_competition(part: pl.DataFrame, comp: pl.DataFrame) -> pl.DataFrame:
 
 
 def stage2_frame(args, split: str, path: Path, comp: pl.DataFrame, t_vec: np.ndarray,
-                 labels: bool, max_bucket: int = 1000) -> pl.DataFrame:
+                 houses: tuple[np.ndarray, np.ndarray], labels: bool,
+                 max_bucket: int = 1000) -> pl.DataFrame:
     part = pl.read_parquet(path).filter(pl.col("bucket") < max_bucket)
     p1 = pl.read_parquet(args.model_dir / f"{split}_p1" / path.name)
     part = part.join(p1, on=["si", "ti"]).sort("si", "ti")
     if labels:
         part = attach_labels(part, args.truth).sort("si", "ti")
     part = stage2_context(part.drop("p1"), part["p1"].to_numpy(), t_vec)
+    part = house_context(part, *houses)
     return add_competition(part, comp)
 
 
 def train_stage2(args: argparse.Namespace) -> None:
     comp = competition(args, "train")
     t_vec = target_vectors(args.embed_dir, "train")
+    houses = house_numbers(args.cache_dir, "train")
     frames = []
     for path in partitions(args.cache_dir, "train"):
-        frames.append(stage2_frame(args, "train", path, comp, t_vec, labels=True,
+        frames.append(stage2_frame(args, "train", path, comp, t_vec, houses, labels=True,
                                    max_bucket=args.train_buckets))
     frame = pl.concat(frames)
     names1 = json.loads((args.model_dir / "stage1.json").read_text())["features"]
-    names2 = names1 + list(STAGE2_EXTRA) + list(COMPETITION)
+    names2 = names1 + list(STAGE2_EXTRA) + list(COMPETITION) + list(HOUSE)
     valid = frame.filter(is_valid(frame))
     train = frame.filter(~is_valid(frame))
     print(f"stage2 train rows {train.height:,} valid rows {valid.height:,}", flush=True)
@@ -173,9 +222,10 @@ def score_stage2(args: argparse.Namespace, split: str) -> pl.DataFrame:
     meta = json.loads((args.model_dir / "stage2_meta.json").read_text())
     model = load_models(args.model_dir, "stage2.json")[0]
     t_vec = target_vectors(args.embed_dir, split)
+    houses = house_numbers(args.cache_dir, split)
     scored = []
     for path in partitions(args.cache_dir, split):
-        part = stage2_frame(args, split, path, comp, t_vec, labels=False)
+        part = stage2_frame(args, split, path, comp, t_vec, houses, labels=False)
         X = xgb.DMatrix(part.select(meta["features"]).cast(pl.Float32).to_numpy(), feature_names=meta["features"])
         scored.append(part.select("si", "ti", "bucket", "p1").with_columns(p2=predict(model, X)))
         print(f"{split} p2 {path.name}: {part.height:,}", flush=True)
