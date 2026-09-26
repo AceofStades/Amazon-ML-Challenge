@@ -76,3 +76,22 @@ Holdout pairs with stage-1 p >= 0.01 (101,103 pairs, 75% positive):
 | average of both | 0.0625 | 0.9964 | 0.9806 |
 
 Target-pair same-entity model: 15.2M labelled target pairs from buckets >= 100 (69% same entity).
+
+## v4: full-train features, 4-fold stage 1, stage 2 with competition and house clusters
+
+All 2.2M training entities have candidates and features (137M pairs), so stage-2 competition features and the
+one-target rule see every rival Source 1 entity, as on test. Holdout (buckets 50-59):
+
+| Scores | Decode | Holdout F0.5 |
+|---|---|---|
+| stage 1 | threshold 0.7, one-to-one | 0.98411 |
+| stage 2 | threshold 0.7, free | 0.98666 |
+| stage 2 | expected F0.5, one-to-one | 0.98707 |
+
+Test profile: uncalibrated v4 predicts 3.80 matches per US entity (decoys); with the per-bin correction 3.20 (US),
+3.30 (India), 3.08 (France). Test/holdout density ratio in the 0.74-0.92 bins is about 5 for US (v3: 2.5), so v4
+separates holdout pairs better but test decoys still land mid-range.
+
+| Submission | Holdout | Leaderboard |
+|---|---|---|
+| v4 + per-bin correction | 0.98707 | pending |
