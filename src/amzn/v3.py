@@ -262,22 +262,30 @@ def build_features(args: argparse.Namespace) -> None:
             FROM {features} f JOIN {candidates} c USING (source1_entity_id, candidate_entity_id)
         """)
         print(f"string features in {time.time() - started:.0f}s", flush=True)
+    # Export partitions, then release DuckDB's buffer pool before the polars stage.
+    raw_dir = Path(args.cache_dir) / "v3" / f"raw_{args.split}"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    for part in range(args.partitions):
+        connection.execute(f"""
+            COPY (SELECT *, (hash(source1_entity_id) % 1000)::SMALLINT AS bucket FROM {features}
+                  WHERE hash(source1_entity_id) % {args.partitions} = {part})
+            TO '{raw_dir / f"raw{part:02d}.parquet"}' (FORMAT parquet)
+        """)
+    connection.close()
+    print("exported raw partitions", flush=True)
     s_ids, t_ids = id_frames(folder, args.split)
     s_vec = np.load(folder / f"{args.split}_source1.npy", mmap_mode="r")
     t_vec = np.concatenate([np.load(folder / f"{args.split}_source{i}.npy", mmap_mode="r") for i in (2, 3)])
     knn = pl.scan_parquet(folder / f"{args.split}_knn.parquet")
-    s_stats = (
-        knn.group_by("q").agg(
-            pl.col("cosine").filter(pl.col("rank") == 1).first().alias("s_top_cos"),
-            pl.col("cosine").filter(pl.col("rank") == 10).first().alias("s_tenth_cos"),
-            pl.col("rank").filter(pl.col("rank") <= args.k).max().alias("knn_depth"),
-        ).rename({"q": "si"}).collect().lazy()
-    )
+    s_stats = knn.group_by("q").agg(
+        pl.col("cosine").filter(pl.col("rank") == 1).first().alias("s_top_cos"),
+        pl.col("cosine").filter(pl.col("rank") == 10).first().alias("s_tenth_cos"),
+    ).rename({"q": "si"}).collect()
     rknn = pl.scan_parquet(folder / f"{args.split}_rknn.parquet")
     t_stats = rknn.group_by("q").agg(
         pl.col("cosine").filter(pl.col("rank") == 1).first().alias("t_best_cos"),
         pl.col("cosine").filter(pl.col("rank") == 2).first().alias("t_second_cos"),
-    ).rename({"q": "ti"}).collect().lazy()
+    ).rename({"q": "ti"}).collect()
     s_rank = rknn.select(pl.col("q").alias("ti"), pl.col("d").alias("si"),
                          pl.col("rank").cast(pl.Float32).alias("s_rank_for_t"))
     knn_rank = knn.filter(pl.col("rank") <= args.k).select(
@@ -286,29 +294,31 @@ def build_features(args: argparse.Namespace) -> None:
     print("token tables ready", flush=True)
     for part in range(args.partitions):
         started = time.time()
-        frame = connection.execute(f"""
-            SELECT *, (hash(source1_entity_id) % 1000)::SMALLINT AS bucket FROM {features}
-            WHERE hash(source1_entity_id) % {args.partitions} = {part}
-        """).pl()
+        raw = raw_dir / f"raw{part:02d}.parquet"
+        frame = (pl.read_parquet(raw)
+                 .join(s_ids, left_on="source1_entity_id", right_on="entity_id")
+                 .join(t_ids, left_on="candidate_entity_id", right_on="entity_id"))
+        sources = frame.select("si").unique()
+        # Restrict the large neighbour tables to this partition's entities before joining.
+        part_rank = s_rank.join(sources.lazy(), on="si", how="semi").collect()
+        part_knn = knn_rank.join(sources.lazy(), on="si", how="semi").collect()
         frame = (
-            frame.lazy()
-            .join(s_ids.lazy(), left_on="source1_entity_id", right_on="entity_id")
-            .join(t_ids.lazy(), left_on="candidate_entity_id", right_on="entity_id")
-            .join(s_stats, on="si", how="left")
+            frame.join(s_stats, on="si", how="left")
             .join(t_stats, on="ti", how="left")
-            .join(s_rank, on=["ti", "si"], how="left")
-            .join(knn_rank, on=["si", "ti"], how="left")
+            .join(part_rank, on=["ti", "si"], how="left")
+            .join(part_knn, on=["si", "ti"], how="left")
             .with_columns(
                 pl.col("s_rank_for_t").fill_null(6.0),
                 pl.col("embed_rank").fill_null(args.k + 1.0),
             )
             .sort("si")
-            .collect()
         )
+        del part_rank, part_knn
         frame = context_features(frame, s_vec, t_vec)
         frame = idf_features(frame, frames, counts)
         frame = frame.with_columns((pl.col("cosine") - pl.col("t_best_cos")).alias("cos_minus_t_best"))
-        frame.drop("knn_depth").write_parquet(out_dir / f"part{part:02d}.parquet")
+        frame.write_parquet(out_dir / f"part{part:02d}.parquet")
+        raw.unlink()
         print(f"partition {part + 1}/{args.partitions}: {frame.height:,} rows in {time.time() - started:.0f}s", flush=True)
 
 

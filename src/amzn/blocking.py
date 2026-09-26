@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,7 +15,7 @@ def connect(path: Path, cache_dir: Path, threads: int = 16) -> duckdb.DuckDBPyCo
     cache_dir.mkdir(parents=True, exist_ok=True)
     connection = duckdb.connect(str(path))
     connection.execute(f"SET threads = {int(threads)}")
-    connection.execute("SET memory_limit = '20GB'")
+    connection.execute(f"SET memory_limit = '{os.environ.get('AMZN_DUCKDB_MEMORY', '14GB')}'")
     connection.execute(f"SET temp_directory = '{sql_string(cache_dir / 'tmp')}'")
     return connection
 
