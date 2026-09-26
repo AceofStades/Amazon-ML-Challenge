@@ -374,3 +374,16 @@ Checked and rejected on the holdout or by counts: topping up entities that have 
 0.99166-0.99173 vs 0.99186), a no-address calibration segment (curve unchanged), dropping France brands
 (France accepts only 553 pure made-up brands). Accepted pairs per entity by house relation match the holdout
 for US and India, so the extra test decoys are already kept out there.
+
+## Diagnostic: France emptied (file 9)
+
+File 7 with every France entity predicted empty scored 0.851 (three decimals). With France singletons (about 5.6-6.1%)
+still counting as correct, US/India F0.5 is about 0.990-0.991 and file 7 France F0.5 about 0.966-0.971.
+The holdout F0.5 used so far (0.9919) counts only links inside the candidates (candidate recall 0.9974), so the
+comparable full holdout value is about 0.9909: US/India test performance matches the holdout.
+
+France checks after file 7: same-name same-address targets are always candidates (recall proxy); missing
+same-address targets are unrelated businesses sharing the address. France accepts below calibrated 0.99 (33k)
+are mostly exact names and domains/acronyms at the Source 1 house, so no precision push. France pure brands at
+the same address: 0.0895 per entity against 0.034-0.038 in US/India test and 0.0385 in training (77% true),
+about 33% true in France and inseparable. A no-address calibration segment changes nothing material.
