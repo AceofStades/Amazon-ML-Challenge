@@ -50,9 +50,18 @@ uv run python -m amzn.crossenc train --seed 2 --entities 600000 --model-dir mode
 uv run python -m amzn.crossenc score --split train --model-dir models/crossencoder_b --pairs cache/ce/train_scores.parquet --output cache/ce_b/train_scores.parquet
 uv run python -m amzn.crossenc score --split test --model-dir models/crossencoder_b --pairs cache/ce/test_scores.parquet --output cache/ce_b/test_scores.parquet
 
-# 7. Pairwise blend (stage 1 + cross-encoder), per-country scorer choice, calibration, decoding.
-uv run python -m amzn.blend --model-dir output/v7 --extras name,full --extra-ce b=cache/ce_b --depth 6 --output-dir output/blend
-uv run python -m amzn.hybrid --blend-dir output/blend --output-dir output
+# Third small cross-encoder (seed 3); same pairs.
+./scripts/run_ce_c.sh
+
+# Large cross-encoder (multilingual-e5-large, MIT) on Kaggle GPUs: export texts and pairs, train, score the pairs
+# with stage-1 p in [0.01, 0.995), then place the scores at cache/ce_large/{train,test}_scores.parquet.
+uv run python -m amzn.kaggle_export
+# kaggle/ce_train (train), kaggle/ce_score (score); pair lists come from cache/ce/*_pairs with p1 < 0.995.
+
+# 7. Pairwise blend (stage 1 + cross-encoders), per-country scorer choice, calibration, decoding.
+uv run python -m amzn.blend --model-dir output/v7 --extras name,full --extra-ce b=cache/ce_b \
+    --extra-ce c=cache/ce_c --extra-ce L=cache/ce_large --depth 6 --output-dir output/blend
+uv run python -m amzn.hybrid --blend-dir output/blend --fallback-calibration none --output-dir output
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
     --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids
