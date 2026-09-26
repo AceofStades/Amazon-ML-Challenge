@@ -387,3 +387,11 @@ same-address targets are unrelated businesses sharing the address. France accept
 are mostly exact names and domains/acronyms at the Source 1 house, so no precision push. France pure brands at
 the same address: 0.0895 per entity against 0.034-0.038 in US/India test and 0.0385 in training (77% true),
 about 33% true in France and inseparable. A no-address calibration segment changes nothing material.
+
+## Kaggle GPU quota plan (2026-09-27 02:20)
+
+The weekly quota is 30 GPU-hours per account and a 2x T4 session counts twice. Two concurrent 7.5-hour runs would
+use the whole week with nothing left for scoring, so every second run was deleted and re-pushed with a 3.75-hour
+budget (kernels 21-27; rekishu and tiya train boundary specialists on stage-1 pairs with 0.02 <= p1 < 0.98).
+Per account: first run about 15.6, deleted run about 1.5, two scorings about 3.4, second run about 8.1 GPU-hours.
+The user account keeps only the XLM-R scoring (about 10 GPU-hours were left).
