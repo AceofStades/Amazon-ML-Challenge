@@ -59,6 +59,8 @@ def main() -> None:
                         help="Multiply calibrated odds for countries without labels (below 1 = stricter)")
     parser.add_argument("--fallback-dir", type=Path,
                         help="Run whose stage-1 scores serve countries without labels (default: --blend-dir)")
+    parser.add_argument("--fallback-column", choices=("p1", "p2"), default="p1",
+                        help="Score of --fallback-dir used for countries without labels (p2: that run's blend)")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -81,9 +83,10 @@ def main() -> None:
                      .select("si", "ti", pl.col("p2").alias("p"))
                      .join(raw, on=["si", "ti"]))
     if unknown.height:
-        raw = unknown.select("si", "ti", pl.col("p1").alias("raw"))
-        fallback = (calibrated(fallback_holdout, unknown, "p1", args.cache_dir, args.fallback_calibration)
-                    .select("si", "ti", pl.col("p1").alias("p")))
+        column = args.fallback_column
+        raw = unknown.select("si", "ti", pl.col(column).alias("raw"))
+        fallback = (calibrated(fallback_holdout, unknown, column, args.cache_dir, args.fallback_calibration)
+                    .select("si", "ti", pl.col(column).alias("p")))
         if args.fallback_odds != 1.0:
             # Stricter decisions for countries without labels: scale the posterior odds.
             odds = pl.col("p") / (1 - pl.col("p")).clip(1e-9)
