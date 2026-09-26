@@ -75,6 +75,23 @@ def house_segments(frame: pl.DataFrame, cache_dir: Path, split: str) -> pl.DataF
     return frame.with_columns(relation["segment"])
 
 
+def name_segments(frame: pl.DataFrame, cache_dir: Path, split: str, threshold: float = 0.95) -> pl.DataFrame:
+    """Refine 'segment' by name agreement (IDF cosine of canonical names >= threshold):
+    decoys usually carry a perturbed name, true records usually the same one."""
+    import glob
+    keys = frame.select("si", "ti")
+    parts = [pl.read_parquet(path, columns=["si", "ti", "name_idf_cos"]).join(keys, on=["si", "ti"], how="semi")
+             for path in sorted(glob.glob(str(cache_dir / "v3" / split / "part*.parquet")))]
+    names = pl.concat(parts)
+    frame = frame.join(names, on=["si", "ti"], how="left")
+    return frame.with_columns(
+        (pl.col("segment") + pl.when(pl.col("name_idf_cos").fill_null(0) >= threshold)
+         .then(pl.lit("_samename")).otherwise(pl.lit("_othername"))).alias("segment")).drop("name_idf_cos")
+
+
+SEGMENTS = [f"{house}_{name}" for house in ("equal", "conflict", "unknown") for name in ("samename", "othername")]
+
+
 def per_segment(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: float, bins: int,
                 top_p: float = 0.99) -> dict:
     """Per-bin correction within each (country, segment); positives per entity keep their
@@ -91,7 +108,8 @@ def per_segment(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: f
         n1_all, _ = histograms(h[column].to_numpy(), h["label"].to_numpy().astype(float), edges, nh)
         m_all = histograms(t[column].to_numpy(), None, edges, nt)
         a = float(m_all[top].sum() / max(n1_all[top].sum(), 1e-9))
-        for segment in ("equal", "conflict", "unknown"):
+        present = sorted(set(h["segment"].unique().to_list()) | set(t["segment"].unique().to_list()))
+        for segment in present:
             hs = h.filter(pl.col("segment") == segment)
             ts = t.filter(pl.col("segment") == segment)
             n1, _ = histograms(hs[column].to_numpy(), hs["label"].to_numpy().astype(float), edges, nh)

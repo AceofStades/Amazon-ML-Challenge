@@ -35,7 +35,12 @@ def calibrated(holdout: pl.DataFrame, test: pl.DataFrame, column: str, cache_dir
         from .calibrate import apply_per_bin, per_bin
         return apply_per_bin(live, column, per_bin(holdout, live, column, 0.02, 25), 0.02)
     live = house_segments(live, cache_dir, "test")
-    fits = per_segment(house_segments(holdout, cache_dir, "train"), live, column, 0.02, 25)
+    held = house_segments(holdout, cache_dir, "train")
+    if mode == "segment-name":
+        from .calibrate import name_segments
+        live = name_segments(live, cache_dir, "test")
+        held = name_segments(held, cache_dir, "train")
+    fits = per_segment(held, live, column, 0.02, 25)
     return apply_per_segment(live, column, fits, 0.02)
 
 
@@ -45,7 +50,10 @@ def main() -> None:
     parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
     parser.add_argument("--embed-dir", type=Path, default=Path("cache/embeddings"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/hybrid"))
-    parser.add_argument("--fallback-calibration", choices=("segment", "uniform", "none"), default="segment",
+    parser.add_argument("--calibration", choices=("segment", "segment-name"), default="segment",
+                        help="Label-shift correction for countries with labels")
+    parser.add_argument("--fallback-calibration", choices=("segment", "segment-name", "uniform", "none"),
+                        default="segment",
                         help="Label-shift correction for countries without labels")
     parser.add_argument("--fallback-dir", type=Path,
                         help="Run whose stage-1 scores serve countries without labels (default: --blend-dir)")
@@ -67,7 +75,8 @@ def main() -> None:
     parts = []
     if known.height:
         raw = known.select("si", "ti", pl.col("p2").alias("raw"))
-        parts.append(calibrated(holdout, known, "p2", args.cache_dir).select("si", "ti", pl.col("p2").alias("p"))
+        parts.append(calibrated(holdout, known, "p2", args.cache_dir, args.calibration)
+                     .select("si", "ti", pl.col("p2").alias("p"))
                      .join(raw, on=["si", "ti"]))
     if unknown.height:
         raw = unknown.select("si", "ti", pl.col("p1").alias("raw"))
