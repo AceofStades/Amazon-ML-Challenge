@@ -1,0 +1,16 @@
+{
+  "id": "siddharthbokade/amzn-ce-train-9",
+  "title": "amzn-ce-train-9",
+  "code_file": "ce_train.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "aceofstades/amzn-er-data",
+    "siddharthbokade/amzn-er-hard"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
