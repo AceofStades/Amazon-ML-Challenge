@@ -65,29 +65,43 @@ Source 1 record (108M test pairs instead of 17 trillion possible pairs).
 
 ## 4. Matching Model and Features
 
-**Pair features (about 60):**
+**Pair features (67):**
 
 - String similarities: raw and canonical Jaro-Winkler, bigram and token Jaccard, edit similarity.
 - IDF-weighted token overlap (IDF computed over all records of a split): cosine, coverage, and the rarest shared
   and missing token.
 - Legal-form agreement and conflict (Inc, LLC, Pvt, Ltd, SARL, SAS and others).
-- House numbers: exact match, conflict, edit distance, prefix/suffix relation, and address-number overlap.
+- House numbers: first-number match, conflict, edit distance and prefix/suffix relation. Also address-wide
+  evidence: whether each record's house number appears anywhere among the other record's address numbers, and the
+  gap and digit-difference shape to the closest number. This handles noise prefixes such as
+  "Door No #834 House No 1958".
 - Missing fields and name ambiguity (how many Source 1 or target records share the name).
 - Embedding features: cosine, rank, gap to the best candidate, the best Source 1 match of the target, and the rank
   of this Source 1 record among them.
 - Sibling agreement: similarity to the other candidates of the same Source 1 record.
 
-**Stage 1:** GPU XGBoost trained on training entities in buckets 0-99 except the holdout (buckets 50-59), with four
-folds. Every training pair gets an out-of-fold score; the test gets the fold average.
+**Stage 1:** GPU XGBoost (depth 9, learning rate 0.05, early stopping) trained on training entities in buckets
+0-99 except the holdout (buckets 50-59), with four folds. Every training pair gets an out-of-fold score; the test
+gets the fold average.
 
-**Stage 2** adds context from the stage-1 scores:
+**Cross-encoder:** `intfloat/multilingual-e5-small` (MIT) fine-tuned as a pair classifier on 3.2M hard pairs
+(encoder top-8 neighbours plus all true links) from training entities in buckets >= 100. It rescores every pair
+with stage-1 p >= 0.01 (8.7M test pairs).
 
-- Within the entity: rank, margin, count and sum of confident candidates, and sibling support weighted by score.
-- Across entities: the strongest competing Source 1 claim on the same target.
-- House-number clusters. Decoy businesses sit a few doors away on the same street and bring several records that
-  share their own house number. A typo on a true record leaves its house number alone among the candidates.
+**Pairwise blend:** a shallow XGBoost (depth 3) combines logit(stage-1 p), the cross-encoder logit, and
+name-genericness inputs (name duplicate counts, IDF of shared tokens, house agreement). It is fitted on
+out-of-fold training pairs; holdout logloss on rescored pairs is 0.048 (stage 1 alone: 0.073).
 
-Both stages use XGBoost 3.4.1 (Apache-2.0) with early stopping on the holdout.
+**Why no entity-context stage:** a second XGBoost stage with entity context was tried. Its inputs were rank and
+sums of scores per entity, sibling support, the strongest competing Source 1 claim per target, and house-number
+clusters. It raised holdout F0.5 to 0.9877. On the test set, however, those features inflate look-alike decoy
+records (see section 5), so the final scorer is purely pairwise.
+
+**Countries without labels:** the blend and the cross-encoder learn how much a name agreement is worth from US and
+India, where business names are distinctive. In a country absent from the labelled holdout (France in the test
+set), names are generic, e.g. "Lille Ecole SARL" exists many times. The pipeline therefore uses the stage-1 score,
+which carries explicit name-genericness and address evidence, for any country without labels. Country stays an
+open label: the rule depends only on which countries the labelled data contains.
 
 **Decoding:** each target record is kept only for its best-scoring Source 1 entity. For each entity, the candidate
 prefix (ranked by probability) that maximizes expected F0.5 is predicted, or an empty list when that scores higher.
@@ -95,24 +109,37 @@ prefix (ranked by probability) that maximizes expected F0.5 is predicted, or an 
 ## 5. Validation and Error Analysis
 
 Holdout: 22,144 training Source 1 entities (hash buckets 50-59), macro F0.5 with singletons, never used for training
-the encoder or the matchers. `docs/experiments.md` lists every result.
+the encoder, the cross-encoder or the matchers. `docs/experiments.md` lists every result.
 
 | Version | Holdout F0.5 | Leaderboard |
 |---|---|---|
 | Key blocking + XGBoost (27 features) | 0.924 | 0.897 |
-| + normalization, encoder kNN, IDF/legal/embedding features, stage 2 | 0.983 | 0.961 |
+| + normalization, encoder kNN, IDF/legal/embedding features, two stages | 0.983 | 0.961 |
 | + test prior-shift correction | 0.983 | 0.968 |
+| Stage 1 + cross-encoder blend, address-wide house features, per-country scorer | 0.990 | see experiments log |
 
-**Distribution shift.** The confident pairs per entity (p >= 0.99) are the same on holdout and test. Pairs scored
-0.3-0.98 are 2-3 times more frequent on test. Inspection shows decoy entities that are absent from Source 1: the
-same or a perturbed name on the same street a few doors away (for example "Williams Templeton" at 2212 Leeward Shore
-Dr with decoys at 2213 and 2217). `calibrate.py` keeps the holdout positives per entity in each score bin, fitted on
-the top bins per country, and counts the excess test pairs as negatives. The corrected posterior replaces the raw
-score (a raw 0.9 becomes about 0.5 for US).
+**Distribution shift.** The confident pairs per entity (p >= 0.99) are the same on holdout and test. Mid-range pairs
+are 2-5 times more frequent on test, almost entirely where the house numbers conflict. Inspection shows decoy
+entities absent from Source 1: the same or a perturbed name on the same street a few doors away (for example
+"Williams Templeton" at 2212 Leeward Shore Dr, with decoys at 2213 and 2217).
 
-**Remaining errors.** Half of the missed links are targets without an address whose name is shared by several
-Source 1 entities, which is ambiguous even to a human. False links are mostly decoy neighbours at nearby house
-numbers.
+`calibrate.py` corrects this without test labels. For each country, house relation (equal, conflict, unknown) and
+score bin, it keeps the holdout positives per entity (scaled by a factor fitted on the top bins) and counts the
+excess test pairs as negatives. The corrected posterior replaces the raw score before decoding.
+
+**Label-free model selection.** `estimate.py` samples labels from the corrected posteriors and scores a candidate
+submission. The per-segment model predicted 0.967 for a submission that scored 0.968 on the leaderboard (the
+uniform model predicted 0.975). The estimator was used to choose between scorers per country:
+
+| Projected test F0.5 | US | India | France |
+|---|---|---|---|
+| Stage 1 | 0.978 | 0.986 | 0.974 |
+| Two-stage (entity context) | 0.978 | 0.983 | 0.910 |
+| Stage 1 + cross-encoder blend | 0.995 | 0.996 | 0.919 |
+
+**Remaining errors.** On the holdout, 1,195 of 2,205 missed links are records without an address whose name is
+shared by several Source 1 entities, which is ambiguous even to a human. On the test set, the largest remaining
+uncertainty is France, where generic names leave the address as the only strong signal.
 
 ## 6. Reproduction and Fair Play
 
@@ -121,4 +148,4 @@ pinned dependencies (`pyproject.toml`, `uv.lock`, `requirements.txt`), the trans
 encoder and the XGBoost models, both output TSVs and this document. Raw challenge data is not included.
 
 Only the supplied TSVs are used. No external business database, API, geocoder or data augmentation. The pretrained
-weights are general multilingual text encoders under the MIT license (118M parameters, far below 8B).
+weights are general multilingual text encoders under the MIT license (118M parameters each, far below 8B).
