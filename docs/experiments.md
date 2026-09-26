@@ -352,3 +352,9 @@ e5-large on hard pairs (seed 41); hrishitachavan bge-reranker-v2-m3 (Apache-2.0)
 (seed 51); hades e5-base (kNN pairs, done) and e5-base on hard pairs (seed 71). Hard pairs are the stage-1
 candidates with p1 >= 0.01 of 600k entities outside the blend buckets, plus two kNN neighbours and all true
 matches (2.83M pairs, 73% positive): the region where the blend uses cross-encoder scores.
+
+## e5-base cross-encoder and gen features in the blend
+
+Holdout F0.5 (in candidates): blend_v7_fullL 0.99160; + e5-base (fullLB) 0.99174; + gen features (genLB) 0.99186.
+File 7 = genLB for US/India + file-6 France rules (US -5.0k/+1.8k pairs, India -3.0k/+2.4k vs file 6).
+cyclop5 Kaggle account: kernels ran with 0 GPUs and no internet (phone verification missing).
