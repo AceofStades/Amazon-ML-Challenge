@@ -3,6 +3,11 @@
 # the labelled countries, France decisions from a finished France file, validation.
 # Usage: ./scripts/final_assemble.sh NAME FRANCE_FILE   (outputs output/final_NAME/{matching_results,candidate_pairs}.tsv)
 set -e
+
+# Serialize CPU-heavy pipelines with the automatic fleet watcher.
+mkdir -p logs
+exec 9>logs/blend.lock
+flock 9
 NAME=${1:?name}
 FRANCE=${2:-output/sub_auto2_frsafe/matching_results.tsv}
 PY=.venv/bin/python
@@ -23,5 +28,5 @@ $PY scripts/compose.py test --cv-scores output/cv_$NAME.parquet --test-calibrate
 $PY scripts/merge_france.py --usin output/compose_$NAME/matching_results.tsv --france $FRANCE \
     --output output/final_$NAME/matching_results.tsv
 ln -f output/hybrid_$NAME/candidate_pairs.tsv output/final_$NAME/candidate_pairs.tsv
-$PY src/utils_validate_submission.py -m output/final_$NAME/matching_results.tsv -c output/final_$NAME/candidate_pairs.tsv | tail -1
+$PY src/utils_validate_submission.py -m output/final_$NAME/matching_results.tsv -c output/final_$NAME/candidate_pairs.tsv
 echo "done output/final_$NAME"

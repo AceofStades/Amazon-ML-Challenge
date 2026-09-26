@@ -2,6 +2,11 @@
 # Blend every cross-encoder whose train and test scores have landed, check the holdout, then build the hybrid,
 # apply the France rules and validate. Usage: ./scripts/fleet_blend.sh NAME  (outputs output/blend_NAME, output/sub_NAME)
 set -e
+
+# Serialize CPU-heavy pipelines with the automatic fleet watcher.
+mkdir -p logs
+exec 9>logs/blend.lock
+flock 9
 NAME=${1:?name}
 PY=.venv/bin/python
 EXTRA=""
@@ -25,5 +30,5 @@ fi
 $PY -m amzn.france_rule --calibrated output/hybrid_$NAME/matching_results.tsv --raw $RAW \
     --drop-conflicts --drop-swaps --add-initials --output output/sub_$NAME/matching_results.tsv
 ln -f output/hybrid_$NAME/candidate_pairs.tsv output/sub_$NAME/candidate_pairs.tsv
-$PY src/utils_validate_submission.py -m output/sub_$NAME/matching_results.tsv -c output/sub_$NAME/candidate_pairs.tsv | tail -1
+$PY src/utils_validate_submission.py -m output/sub_$NAME/matching_results.tsv -c output/sub_$NAME/candidate_pairs.tsv
 echo "done output/sub_$NAME"

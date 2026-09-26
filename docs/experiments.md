@@ -432,3 +432,29 @@ claims on the target). Cross-validated over 220k entities: logloss on ambiguous 
 
 Blend-scored France (with segment-clean calibration) drops 24.5k true "drop plus French suffix" pairs: the
 cross-encoders do not know the French suffixes, stage 1 does through normalization.
+
+## Fleet handoff verification (2026-09-27 04:05 IST)
+
+The user confirms that file 10 is unsubmitted. Its leaderboard score is unknown,
+and all five daily submissions remain available based on the handoff and this
+confirmation. The expected score is still only an estimate.
+
+Host process checks confirm that the twelve remaining Kaggle chains, the
+automatic fleet watcher, and both local GPU chains are alive. Repeated chain
+command lines are parent and child shells in the same session, not duplicate
+watchers. Kaggle confirms that XLM-R 7, bge-m3 9, and LaBSE 14 have completed
+training and scoring, with scores downloaded. The other twelve training kernels
+remain running. Nine additional cross-encoder directories have both score files.
+
+The automatic auto4 blend reports holdout F0.5 0.99188 and logloss 0.00395,
+compared with 0.99186 and 0.00402 for genLB. These are the candidate-conditioned
+holdout values, not full CV or leaderboard scores. The second local hard-pair
+e5-base model is scoring test pairs; its boundary successor continues waiting.
+The root disk has 64 GB free. No training or scoring kernels were stopped.
+
+The automatic and final assembly scripts now share a file lock to prevent
+overlapping heavy pipelines. Their validator runs preserve failure exit codes;
+the previous pipe into `tail` could falsely report a successful assembly.
+Isolated fixtures verify that both scripts wait for the lock and return the
+validator's nonzero exit code. The noon runner fixture verifies that validation
+failure does not stage a file and that valid output is staged as a hardlink.
