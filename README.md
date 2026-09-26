@@ -37,17 +37,17 @@ uv run python -m amzn.v3 candidates --split test
 uv run python -m amzn.v3 features --split test --partitions 16
 
 # 5. Stage-1 matcher (4 folds; out-of-fold scores for every training pair).
-uv run python -m amzn.train_v4 stage1 p1_train p1_test --model-dir output/v6 --pair-house
+uv run python -m amzn.train_v4 stage1 p1_train p1_test --model-dir output/v7 --pair-house
 
 # 6. Cross-encoder: train on encoder hard negatives (buckets >= 100), score pairs with stage-1 p >= 0.01.
 uv run python -m amzn.crossenc train
-uv run python -m amzn.crossenc select --split train --model-dir output/v6 --output cache/ce/train_pairs.parquet
-uv run python -m amzn.crossenc select --split test --model-dir output/v6 --output cache/ce/test_pairs.parquet
+uv run python -m amzn.crossenc select --split train --model-dir output/v7 --output cache/ce/train_pairs.parquet
+uv run python -m amzn.crossenc select --split test --model-dir output/v7 --output cache/ce/test_pairs.parquet
 uv run python -m amzn.crossenc score --split train --pairs cache/ce/train_pairs.parquet --output cache/ce/train_scores.parquet
 uv run python -m amzn.crossenc score --split test --pairs cache/ce/test_pairs.parquet --output cache/ce/test_scores.parquet
 
 # 7. Pairwise blend (stage 1 + cross-encoder), per-country scorer choice, calibration, decoding.
-uv run python -m amzn.blend --model-dir output/v6 --extras name --output-dir output/blend
+uv run python -m amzn.blend --model-dir output/v7 --extras name --output-dir output/blend
 uv run python -m amzn.hybrid --blend-dir output/blend --output-dir output
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
