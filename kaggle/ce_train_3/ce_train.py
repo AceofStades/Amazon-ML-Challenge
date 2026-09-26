@@ -170,6 +170,7 @@ def worker(rank: int, world: int, a, b, labels) -> None:
 
 
 if __name__ == "__main__":
+    print("base model:", CONFIG["model"], flush=True)
     print(torch.cuda.device_count(), "GPUs:", [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())], flush=True)
     AutoTokenizer.from_pretrained(CONFIG["model"])
     AutoModel.from_pretrained(CONFIG["model"])  # download once before workers start
