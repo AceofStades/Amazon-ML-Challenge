@@ -47,7 +47,7 @@ def worker(rank: int, world: int, model_dir: str, split: str, out: str):
     b = t_text.gather(pairs["ti"].to_numpy()[mine]).to_list()
     del s_text, t_text, pairs
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
-    model = AutoModel.from_pretrained(model_dir, torch_dtype=torch.float16).cuda(rank).eval()
+    model = AutoModel.from_pretrained(model_dir, torch_dtype=torch.float16, add_pooling_layer=False).cuda(rank).eval()
     head = torch.nn.Linear(model.config.hidden_size, 1)
     head.load_state_dict(torch.load(os.path.join(model_dir, "head.pt"), map_location="cpu"))
     head = head.half().cuda(rank)
