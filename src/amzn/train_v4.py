@@ -144,7 +144,7 @@ def stage2_frame(args, split: str, path: Path, comp: pl.DataFrame, t_vec: np.nda
     p1 = pl.read_parquet(args.model_dir / f"{split}_p1" / path.name)
     part = part.join(p1, on=["si", "ti"]).sort("si", "ti")
     if labels:
-        part = attach_labels(part, args.truth)
+        part = attach_labels(part, args.truth).sort("si", "ti")
     part = stage2_context(part.drop("p1"), part["p1"].to_numpy(), t_vec)
     return add_competition(part, comp)
 
