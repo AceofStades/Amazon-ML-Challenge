@@ -221,6 +221,8 @@ def main() -> None:
     model2 = fit(train2, valid2, names2, args, args.rounds)
     model2.save_model(args.output_dir / "stage2.json")
     p2 = predict(model2, valid2, names2)
+    valid2.select("source1_entity_id", "candidate_entity_id", "si", "ti", "label", "p1").with_columns(
+        p2=p2).write_parquet(args.output_dir / "valid_predictions.parquet")
 
     valid_ids = set(duckdb.sql(
         "SELECT entity_id FROM read_csv('dataset/train/train_source1.tsv', delim='\t', quote='', header=true, all_varchar=true) "
