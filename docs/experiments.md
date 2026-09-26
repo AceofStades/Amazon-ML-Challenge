@@ -172,3 +172,16 @@ The English suffixes appear in training, so the model has learned them; the Fren
 France records into mid scores. France's excess mid-score mass sits in the house-equal segment (p1 0.73-0.88:
 0.069 per entity against 0.017 expected positives). v7 merges runs of single letters ('s a r l' -> 'sarl') and
 treats cie, compagnie, fils, freres, frs, associes, groupe, developpement, pc, pllc, lp like legal forms.
+
+## v7: renormalized names (dotted initials, French suffixes)
+
+| Scores | US | India | France |
+|---|---|---|---|
+| v7 stage 1 | 0.9781 | 0.9859 | 0.9802 |
+| v7 blend + name inputs | 0.9950 | 0.9955 | 0.9170 |
+
+France stage-1 projection rose from 0.9737 (v6) to 0.9802. Hybrid v7: projected 0.9930; 5,815,669 matches
+(France 3.21 per entity, up from 3.03).
+
+Holdout loss breakdown for the v6 blend (F0.5 0.9900 including the recall ceiling): partial recall 0.0067
+(1,971 entities), a false merge 0.0014, all links missed 0.0013, singleton false merge 0.0006.
