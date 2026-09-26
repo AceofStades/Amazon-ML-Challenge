@@ -34,21 +34,33 @@ HOUSE = ("t_house_known", "t_house_is_s", "t_house_size", "t_house_other_p1", "t
          "house_log_gap", "house_digit_diffs", "house_first_diff", "house_last_diff", "house_same_length")
 
 
-def house_numbers(cache_dir: Path, split: str) -> tuple[np.ndarray, np.ndarray]:
-    """Normalized first house number per record, in si and ti order ('' when absent)."""
-    def read(i: int) -> pl.Series:
+def house_numbers(cache_dir: Path, split: str) -> tuple[np.ndarray, np.ndarray, pl.Series]:
+    """First house number per record (si and ti order, '' when absent) and, per target,
+    every number in its address (leading zeros removed)."""
+    def read(i: int, columns: list[str]) -> pl.DataFrame:
         return pl.read_csv(cache_dir / f"{split}_source{i}.tsv", separator="\t", quote_char=None,
-                           infer_schema=False, columns=["house"])["house"].fill_null("")
-    source1 = read(1)
-    targets = pl.concat([read(2), read(3)])
-    return source1.to_numpy(), targets.to_numpy()
+                           infer_schema=False, columns=columns)
+    source1 = read(1, ["house"])["house"].fill_null("")
+    targets = pl.concat([read(2, ["house", "address"]), read(3, ["house", "address"])])
+    numbers = targets["address"].fill_null("").str.extract_all(r"\d+").list.eval(
+        pl.element().str.strip_chars_start("0").replace("", "0")).alias("numbers")
+    return source1.to_numpy(), targets["house"].fill_null("").to_numpy(), numbers
 
 
-def house_context(part: pl.DataFrame, s_house: np.ndarray, t_house: np.ndarray) -> pl.DataFrame:
+def house_context(part: pl.DataFrame, s_house: np.ndarray, t_house: np.ndarray,
+                  t_numbers: pl.Series | None = None) -> pl.DataFrame:
     """Decoy entities sit a few doors away and bring several records sharing their own
-    house number; a typo on a true record leaves its house number alone in the group."""
+    house number; a typo on a true record leaves its house number alone in the group.
+    A target counts as at the Source 1 house when that number appears anywhere in its
+    address (noise such as 'Door No #834 House No 1958' puts another number first)."""
     frame = part.select("si", "ti", "p1").with_columns(
-        pl.Series("hs", s_house[part["si"].to_numpy()]), pl.Series("ht", t_house[part["ti"].to_numpy()]))
+        pl.Series("hs", s_house[part["si"].to_numpy()]), pl.Series("ht_first", t_house[part["ti"].to_numpy()]))
+    if t_numbers is not None:
+        frame = frame.with_columns(pl.Series("t_numbers", t_numbers.gather(part["ti"].to_numpy())))
+        s_in_t = (pl.col("hs") != "") & pl.col("t_numbers").list.contains(pl.col("hs"))
+    else:
+        s_in_t = (pl.col("hs") != "") & (pl.col("hs") == pl.col("ht_first"))
+    frame = frame.with_columns(pl.when(s_in_t).then(pl.col("hs")).otherwise(pl.col("ht_first")).alias("ht"))
     known = pl.col("ht") != ""
     clusters = (frame.filter(known).group_by("si", "ht")
                 .agg(pl.len().alias("size"), pl.col("p1").max().alias("cmax"),
