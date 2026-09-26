@@ -30,7 +30,8 @@ from .v3 import id_frames
 COMPETITION = ("t_p1_other_max", "t_p1_other_second", "t_claims50", "p1_minus_t_other",
                "p1_share_t", "t_candidates")
 HOUSE = ("t_house_known", "t_house_is_s", "t_house_size", "t_house_other_p1", "t_house_cluster_rank",
-         "s_house_size", "s_house_max_p1", "best_other_house_p1", "p1_minus_s_house_max")
+         "s_house_size", "s_house_max_p1", "best_other_house_p1", "p1_minus_s_house_max",
+         "house_log_gap", "house_digit_diffs", "house_first_diff", "house_last_diff", "house_same_length")
 
 
 def house_numbers(cache_dir: Path, split: str) -> tuple[np.ndarray, np.ndarray]:
@@ -74,7 +75,38 @@ def house_context(part: pl.DataFrame, s_house: np.ndarray, t_house: np.ndarray) 
                pl.col("best_other_house_p1").fill_null(-1.0),
            )
            .with_columns((pl.col("p1") - pl.col("s_house_max_p1")).alias("p1_minus_s_house_max")))
+    out = out.with_columns(house_shape(out["hs"], out["ht"]))
     return part.with_columns(out.select(HOUSE))
+
+
+def house_shape(hs: pl.Series, ht: pl.Series) -> list[pl.Series]:
+    """How two house numbers differ: decoys sit a few doors away (last digits change
+    by a small offset); typos swap one digit anywhere or drop digits."""
+    a, b = hs.to_numpy(), ht.to_numpy()
+    n = len(a)
+    gap = np.full(n, -1.0, np.float32)
+    diffs = np.full(n, -1.0, np.float32)
+    first = np.full(n, -1.0, np.float32)
+    last = np.full(n, -1.0, np.float32)
+    same_length = np.full(n, -1.0, np.float32)
+    for i in range(n):
+        x, y = a[i], b[i]
+        if not x or not y:
+            continue
+        if len(x) < 10 and len(y) < 10:
+            gap[i] = np.log1p(abs(int(x) - int(y)))
+        same_length[i] = float(len(x) == len(y))
+        if len(x) == len(y):
+            positions = [k for k in range(len(x)) if x[k] != y[k]]
+            diffs[i] = len(positions)
+            if positions:
+                first[i] = positions[0] / len(x)
+                last[i] = (len(x) - 1 - positions[-1])
+            else:
+                first[i] = last[i] = 99.0
+    return [pl.Series("house_log_gap", gap), pl.Series("house_digit_diffs", diffs),
+            pl.Series("house_first_diff", first), pl.Series("house_last_diff", last),
+            pl.Series("house_same_length", same_length)]
 VALID = (50, 60)
 
 
