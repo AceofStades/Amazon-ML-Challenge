@@ -185,9 +185,21 @@ def add_competition(part: pl.DataFrame, comp: pl.DataFrame) -> pl.DataFrame:
     ).drop("t_top1", "t_top2", "claims50", "p1_sum_t")
 
 
+def extra_frames(templates: list[str], split: str) -> list[pl.LazyFrame]:
+    """Extra per-pair feature files keyed by (si, ti); '{split}' is substituted."""
+    return [pl.scan_parquet(t.format(split=split)) for t in templates]
+
+
+def extra_columns(templates: list[str], split: str) -> list[str]:
+    names: list[str] = []
+    for frame in extra_frames(templates, split):
+        names += [c for c in frame.collect_schema().names() if c not in ("si", "ti")]
+    return names
+
+
 def stage2_frame(args, split: str, path: Path, comp: pl.DataFrame, t_vec: np.ndarray,
                  houses: tuple[np.ndarray, np.ndarray], labels: bool,
-                 max_bucket: int = 1000) -> pl.DataFrame:
+                 max_bucket: int = 1000, extras: list[str] = ()) -> pl.DataFrame:
     part = pl.read_parquet(path).filter(pl.col("bucket") < max_bucket)
     p1 = pl.read_parquet(args.model_dir / f"{split}_p1" / path.name)
     part = part.join(p1, on=["si", "ti"]).sort("si", "ti")
@@ -195,7 +207,15 @@ def stage2_frame(args, split: str, path: Path, comp: pl.DataFrame, t_vec: np.nda
         part = attach_labels(part, args.truth).sort("si", "ti")
     part = stage2_context(part.drop("p1"), part["p1"].to_numpy(), t_vec)
     part = house_context(part, *houses)
-    return add_competition(part, comp)
+    part = add_competition(part, comp)
+    if extras:
+        sources = part.select(pl.col("si").unique()).lazy()
+        for frame in extra_frames(list(extras), split):
+            extra = frame.join(sources, on="si", how="semi").collect()
+            extra = extra.with_columns(pl.col("si").cast(part.schema["si"]), pl.col("ti").cast(part.schema["ti"]))
+            part = part.join(extra, on=["si", "ti"], how="left")
+        part = part.sort("si", "ti")
+    return part
 
 
 def train_stage2(args: argparse.Namespace) -> None:
@@ -205,32 +225,35 @@ def train_stage2(args: argparse.Namespace) -> None:
     frames = []
     for path in partitions(args.cache_dir, "train"):
         frames.append(stage2_frame(args, "train", path, comp, t_vec, houses, labels=True,
-                                   max_bucket=args.train_buckets))
+                                   max_bucket=args.train_buckets, extras=args.extra))
     frame = pl.concat(frames)
     names1 = json.loads((args.model_dir / "stage1.json").read_text())["features"]
-    names2 = names1 + list(STAGE2_EXTRA) + list(COMPETITION) + list(HOUSE)
+    names2 = (names1 + list(STAGE2_EXTRA) + list(COMPETITION) + list(HOUSE)
+              + extra_columns(args.extra, "train"))
     valid = frame.filter(is_valid(frame))
     train = frame.filter(~is_valid(frame))
-    print(f"stage2 train rows {train.height:,} valid rows {valid.height:,}", flush=True)
+    print(f"stage2 train rows {train.height:,} valid rows {valid.height:,} features {len(names2)}", flush=True)
     model = fit(train, valid, names2, args)
-    model.save_model(args.model_dir / "stage2.json")
-    (args.model_dir / "stage2_meta.json").write_text(json.dumps({"features": names2}, indent=1))
+    model.save_model(args.stage2_dir / "stage2.json")
+    (args.stage2_dir / "stage2_meta.json").write_text(
+        json.dumps({"features": names2, "extras": list(args.extra)}, indent=1))
 
 
 def score_stage2(args: argparse.Namespace, split: str) -> pl.DataFrame:
     comp = competition(args, split)
-    meta = json.loads((args.model_dir / "stage2_meta.json").read_text())
-    model = load_models(args.model_dir, "stage2.json")[0]
+    meta = json.loads((args.stage2_dir / "stage2_meta.json").read_text())
+    model = load_models(args.stage2_dir, "stage2.json")[0]
     t_vec = target_vectors(args.embed_dir, split)
     houses = house_numbers(args.cache_dir, split)
     scored = []
     for path in partitions(args.cache_dir, split):
-        part = stage2_frame(args, split, path, comp, t_vec, houses, labels=False)
+        part = stage2_frame(args, split, path, comp, t_vec, houses, labels=False,
+                            extras=meta.get("extras", []))
         X = xgb.DMatrix(part.select(meta["features"]).cast(pl.Float32).to_numpy(), feature_names=meta["features"])
         scored.append(part.select("si", "ti", "bucket", "p1").with_columns(p2=predict(model, X)))
         print(f"{split} p2 {path.name}: {part.height:,}", flush=True)
     frame = pl.concat(scored)
-    frame.write_parquet(args.model_dir / f"{split}_scored.parquet")
+    frame.write_parquet(args.stage2_dir / f"{split}_scored.parquet")
     return frame
 
 
@@ -242,7 +265,7 @@ def one_to_one(frame: pl.DataFrame, column: str) -> pl.DataFrame:
 
 
 def evaluate(args: argparse.Namespace) -> None:
-    frame = pl.read_parquet(args.model_dir / "train_scored.parquet")
+    frame = pl.read_parquet(args.stage2_dir / "train_scored.parquet")
     s_ids, t_ids = id_frames(args.embed_dir, "train")
     valid_si = frame.filter(is_valid(frame))["si"].unique()
     all_valid = s_ids.join(pl.DataFrame({"si": valid_si}), on="si")
@@ -268,16 +291,16 @@ def evaluate(args: argparse.Namespace) -> None:
                 results[key] = macro_f05(named, truth, id_of, valid_ids)
                 print(key, round(results[key], 5), flush=True)
     best = max(results, key=results.get)
-    (args.model_dir / "evaluation.json").write_text(json.dumps({"best": best, "all": results}, indent=1))
+    (args.stage2_dir / "evaluation.json").write_text(json.dumps({"best": best, "all": results}, indent=1))
     print("best", best, results[best])
 
 
 def write_test(args: argparse.Namespace) -> None:
     """Decode test scores with the best holdout configuration and write both TSVs."""
     from .infer_v3 import grouped_tsv
-    best = json.loads((args.model_dir / "evaluation.json").read_text())["best"]
+    best = json.loads((args.stage2_dir / "evaluation.json").read_text())["best"]
     column, o2o, mode, th, mass = best.split("_")
-    frame = pl.read_parquet(args.model_dir / "test_scored.parquet")
+    frame = pl.read_parquet(args.stage2_dir / "test_scored.parquet")
     candidates = frame.select("si", "ti")
     if o2o == "o2o":
         frame = one_to_one(frame, column)
@@ -306,6 +329,10 @@ def main() -> None:
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--model-dir", type=Path, default=Path("output/v4"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/v4"))
+    parser.add_argument("--stage2-dir", type=Path,
+                        help="Where stage-2 artifacts go (defaults to --model-dir)")
+    parser.add_argument("--extra", action="append", default=[],
+                        help="Extra stage-2 feature parquet keyed by si, ti; '{split}' is substituted")
     parser.add_argument("--train-buckets", type=int, default=100)
     parser.add_argument("--folds", type=int, default=4)
     parser.add_argument("--rounds", type=int, default=3000)
@@ -313,6 +340,8 @@ def main() -> None:
     parser.add_argument("--eta", type=float, default=0.05)
     args = parser.parse_args()
     args.model_dir.mkdir(parents=True, exist_ok=True)
+    args.stage2_dir = args.stage2_dir or args.model_dir
+    args.stage2_dir.mkdir(parents=True, exist_ok=True)
     for step in args.steps:
         started = time.time()
         {"stage1": lambda: train_stage1(args),
