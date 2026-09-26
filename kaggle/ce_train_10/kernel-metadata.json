@@ -1,0 +1,16 @@
+{
+  "id": "cyclop5/amzn-ce-train-10",
+  "title": "amzn-ce-train-10",
+  "code_file": "ce_train.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "aceofstades/amzn-er-data",
+    "cyclop5/amzn-er-hard"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

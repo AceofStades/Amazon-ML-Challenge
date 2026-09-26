@@ -1,0 +1,17 @@
+{
+  "id": "cyclop5/amzn-ce-score-10",
+  "title": "amzn-ce-score-10",
+  "code_file": "ce_score.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "aceofstades/amzn-er-data"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "cyclop5/amzn-ce-train-10"
+  ]
+}
