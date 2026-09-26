@@ -12,8 +12,10 @@ Times are IST (UTC+5:30). Paths are relative to the repo root `~/code/amzn` on h
 
 ## 1. First ten minutes (checklist)
 
-1. **Ask the user for the leaderboard score of file 10.** It was staged at 03:11 for submission before they slept.
-   Record the score in `output/to_submit/INDEX.txt` and `docs/experiments.md`.
+1. **File 10 is unsubmitted and on hold.** The user prefers the first submission after the Kaggle fleet finishes.
+   It is now `output/to_submit/10_HOLD_auto2_blend_composition_france_additions_matching_results.tsv`.
+   Preserve all five daily slots. A file 10 score would combine blend, composition, and France changes and cannot
+   isolate whether composition transfers.
 2. **Check the cross-encoder (CE) fleet:** `./scripts/kaggle_status.sh`. Each line shows the training and scoring
    kernel status and whether the scores are already in `cache/ce_NAME`.
 3. **Check that the background jobs are alive** (section 6):
@@ -89,6 +91,7 @@ Times are IST (UTC+5:30). Paths are relative to the repo root `~/code/amzn` on h
 
 - **hades** (the user's PC): RTX 5060 Ti 16 GB, 31 GB RAM, 16 cores, root disk 275 GB. Repo at `~/code/amzn`,
   branch `hmm`, remote `git@github.com:AceofStades/Amazon-ML-Challenge.git`.
+  The current agent session runs on hades itself; no SSH hop is needed.
   - Python via uv: `.venv/bin/python`. Modules run as `.venv/bin/python -m amzn.<module>`. Scripts that import
     `amzn` need `PYTHONPATH=src`.
   - Ignored by git: `dataset/`, `cache/`, `models/`, `logs/`, `output/`.
@@ -191,12 +194,17 @@ trained model from the training kernel's output), waits for it, and downloads `s
 
 ## 7. Plan for the rest of Sep 27
 
-The resumed session prepares `scripts/noon_build.sh fleetA` for a detached
-11:00 IST start. It waits for the shared pipeline lock, runs the final assembly,
+The resumed session runs `scripts/noon_build.sh fleetA` detached on this machine.
+Starting at 11:00 IST, it waits for readable train and test score files from every
+fleet model and both remaining local models, up to a 12:00 IST readiness cutoff.
+It then waits for the shared pipeline lock, runs the final assembly,
 and stages validated file 11 with hardlinks, an index entry, and an experiment
 log commit. Check `logs/noon_fleetA.log` and the host process list before starting
 another final assembly. Both pipeline scripts now use `logs/blend.lock` to avoid
 overlap; an auto-blend started before this change finishes normally.
+If models are still missing at the cutoff, it drafts with landed models and logs
+the pending models. Drafting does not consume a submission; the user uploads only
+after we review completeness and validation. Do not let a failed kernel block all progress.
 
 1. **Around 11:00–12:00, build the noon submission** with every CE that has landed:
    `./scripts/final_assemble.sh fleetA` (about 25–30 min). It runs these steps:
@@ -215,10 +223,10 @@ overlap; an auto-blend started before this change finishes normally.
      automatically.
    - Stage the result as `output/to_submit/11_<desc>_matching_results.tsv` (hardlink), update `INDEX.txt`, and
      tell the user.
-2. **Use the file 10 score to decide about composition.** File 10 should land at about file 7 + 0.0002–0.0004
-   (≈ 0.9876–0.9878).
-   - If it scores below file 7, composition probably does not transfer to the test set, which has about 2× more
-     decoys. In that case build the next file without it, for example:
+2. **Hold file 10 and use the completed fleet as the first baseline.** File 10's estimated 0.9876–0.9878
+   is unmeasured. Its simultaneous blend, composition and France changes cannot isolate composition transfer.
+   - If composition needs a leaderboard check, compare otherwise identical fleet variants with and without it.
+     Build the variant without composition from the same hybrid and France decisions, for example:
      `python scripts/merge_france.py --usin output/hybrid_NAME/matching_results.tsv --france output/sub_auto2_frsafe/matching_results.tsv --output output/final_NAME_nocomp/matching_results.tsv`,
      then copy or hardlink `candidate_pairs.tsv` and validate.
 3. **Spend the remaining submissions on France** (section 8). The leaderboard is deterministic to 1e-6, so a

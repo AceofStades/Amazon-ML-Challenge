@@ -458,3 +458,28 @@ the previous pipe into `tail` could falsely report a successful assembly.
 Isolated fixtures verify that both scripts wait for the lock and return the
 validator's nonzero exit code. The noon runner fixture verifies that validation
 failure does not stage a file and that valid output is staged as a hardlink.
+
+## Submission timing policy (2026-09-27 04:15 IST)
+
+The user prefers waiting for the Kaggle fleet before the first submission. File
+10 remains unsubmitted and is renamed with a HOLD label. Its expected score is
+unmeasured. All five daily slots remain available under the recorded submission
+history; keep them for a completed-fleet baseline, controlled France changes, and
+the final selection.
+
+File 10 changes the cross-encoder blend, composition rescoring, and France rules
+together. Its leaderboard delta cannot isolate composition. A leaderboard check
+of composition requires otherwise identical fleet variants.
+
+The scheduled noon build checks readiness from 11:00 IST and waits until all
+fleet and remaining local score files are readable, with a 12:00 IST cutoff for
+drafting with available results. No submission occurs automatically. The current
+session runs directly on hades, as confirmed by the host name.
+
+Seven small readiness tests cover complete files, missing train/test files,
+partial parquet files, local models, comments, malformed configuration, and a
+missing fleet definition. Runner fixtures verify that configuration and
+validation failures do not stage a submission, that the cutoff drafts with
+available scores, and that a push retry preserves the completed build and
+hardlink. The live readiness check reports twelve Kaggle models and both local
+models pending.
