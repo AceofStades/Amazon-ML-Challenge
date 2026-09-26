@@ -561,3 +561,32 @@ nearby-number decoys make indiscriminate restoration unsafe. Review instead
 found false house conflicts caused by number prefixes, address token order,
 street-type artifacts, postal codes and apartment numbers. These narrow
 parser hypotheses are evaluated separately. Python compilation passes.
+
+## Address-equality parser restoration (2026-09-27)
+
+`scripts/france_audit_restore.py` evaluates exact normalized address token sets
+after repairing the literal French `ndeg` number prefix. A broader comparison
+allows the target's numeric tokens to be a subset of the source's numbers
+when nonnumeric address tokens agree. Both restrict names to exact, drop,
+typo, filler or added-word classes; rare replacements must preserve a source
+word and cannot be single made-up brands. Training labels are joined directly
+to out-of-fold stage-1 candidate pairs.
+
+Run `train` to build `output/france_audit_train_parser.parquet`, then `report`
+to reproduce `logs/france_audit_restore_train_report.log`. Run `test` against
+the rejection artifact with `--min-p 0.9` and optionally
+`--matching-output output/france_parser_eq/matching_results.tsv` to draft a
+comparison. Use the shared pipeline lock and two CPU threads for each command.
+
+At p1 at least 0.9, exact repaired-address pairs are 99.93744% true across
+233,376 labelled pairs; number-subset pairs are 99.93885% true across 258,402.
+Conditioning on rejection by the original house-conflict rule gives 1,478
+exact-address pairs, all true, and 4,877 number-subset pairs at 99.95899%.
+These are training-country results, not measured France precision.
+
+The exact-address France comparison adds 991 links to 932 owners, including
+53 links to 32 currently empty owners. The broader number-subset alternative
+has 2,165 additions. Existing target assignments are preserved. The exact
+draft's additions all occur in the candidate file. Neither variant is staged
+or submitted; its small plausible gain does not merit a separate submission
+slot. Python compilation passes.
