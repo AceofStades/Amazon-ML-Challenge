@@ -63,4 +63,4 @@ posteriors: raw 0.6 -> 0.22, raw 0.9 -> 0.54, raw 0.97 -> 0.76, raw >= 0.99 -> 1
 | Version | Matches | US mean k | India mean k | France mean k | Leaderboard |
 |---|---|---|---|---|---|
 | v3 legal | 5,985,926 | 3.53 | 3.42 | 3.38 | 0.960932 |
-| v3 legal + per-bin correction | 5,624,024 | 3.23 | 3.34 | 2.99 | pending |
+| v3 legal + per-bin correction | 5,624,024 | 3.23 | 3.34 | 2.99 | 0.968379 (rank ~403) |
