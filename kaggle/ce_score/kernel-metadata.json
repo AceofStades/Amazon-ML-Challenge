@@ -1,0 +1,13 @@
+{
+  "id": "aceofstades/amzn-ce-score",
+  "title": "amzn-ce-score",
+  "code_file": "ce_score.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "false",
+  "dataset_sources": ["aceofstades/amzn-er-data", "aceofstades/amzn-er-pairs"],
+  "competition_sources": [],
+  "kernel_sources": ["aceofstades/amzn-ce-train"]
+}
