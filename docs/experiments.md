@@ -219,3 +219,28 @@ holdout gain found from these signals. Depth-8 blend: logloss 0.0468, F0.5 0.990
 intfloat/multilingual-e5-large (MIT, 560M) with frozen word embeddings, DDP fp16, 3.0M hard pairs from buckets >= 100:
 6.0 h at 138 pairs/s. Validation on 30k held-out training pairs: logloss 0.0373, accuracy 0.9852. Scoring the 3.8M
 pairs with stage-1 p in [0.01, 0.995) on Kaggle.
+
+## Leaderboard: hybrid v7 full
+
+Leaderboard 0.984806 (rank 71; top 0.990556) against a projection of 0.9934. US/India top-bin counts on test match
+holdout (ratios 0.995-1.007) and cross-encoder promotions barely exceed holdout, so the gap most likely sits in
+France (back-solved about 0.92 if US/India score as projected). France predictions per entity: 3.20 against 3.39 for
+US/India, suggesting the pooled calibration over-corrects France.
+
+## One-to-one tie bug (reported by a teammate)
+
+Calibration maps many top scores to exactly 1.0, and the rule "zero every score below the target's maximum" kept
+all tied Source 1 entities. hybrid v7 full assigned 1,420 targets to more than one entity (1,477 surplus pairs:
+France 107, India 788, US 582). Fixed: one winner per target, ties broken by raw score, then Source 1 row.
+
+## Large cross-encoder in the blend; France calibration variants
+
+| Blend | Holdout logloss | Holdout F0.5 | US | India |
+|---|---|---|---|---|
+| full + two small cross-encoders | 0.0466 | 0.99046 | 0.9948 | 0.9964 |
+| + third small cross-encoder | 0.0461 | 0.99052 | | |
+| + large cross-encoder (uncertain pairs) | 0.0443 | 0.99094 | 0.9955 | 0.9973 |
+
+France predictions per entity by calibration mode: segment 3.20, uniform 3.22, none (raw stage 1) 3.39. Pairs added
+by 'none' are mostly acronyms, domains, typos and generic-word swaps at the same address (estimated 70-80% true).
+Submissions: hybrid_L_frnone (5,875,982 matches), hybrid_L_frsegment (5,827,268).
