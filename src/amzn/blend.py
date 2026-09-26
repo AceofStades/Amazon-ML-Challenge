@@ -112,6 +112,12 @@ def main() -> None:
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/v4_blend"))
     parser.add_argument("--extras", default="", help="comma list: house, tt, name, full, gen")
+    parser.add_argument("--bag", type=int, default=1, help="Average this many models with different seeds")
+    parser.add_argument("--eta", type=float, default=0.1)
+    parser.add_argument("--subsample", type=float, default=1.0)
+    parser.add_argument("--colsample", type=float, default=1.0)
+    parser.add_argument("--min-child-weight", type=float, default=1.0)
+    parser.add_argument("--holdout-only", action="store_true", help="Skip scoring the test set")
     parser.add_argument("--no-ce", action="store_true",
                         help="Leave cross-encoder logits out of the features (scorer for countries without labels)")
     parser.add_argument("--depth", type=int, default=3)
@@ -147,25 +153,32 @@ def main() -> None:
 
     def matrix(frame: pl.DataFrame) -> xgb.DMatrix:
         return xgb.DMatrix(frame.select(FEATURES).to_numpy(), label=frame["label"].to_numpy(), feature_names=FEATURES)
-    model = xgb.train({"objective": "binary:logistic", "eval_metric": "logloss", "max_depth": args.depth, "eta": 0.1,
-                       "tree_method": "hist", "seed": 3},
-                      matrix(fit_rows), num_boost_round=1000, evals=[(matrix(valid_rows), "valid")],
-                      early_stopping_rounds=30, verbose_eval=100)
-    model.save_model(args.output_dir / "blend.json")
-    (args.output_dir / "blend_meta.json").write_text(json.dumps({"features": FEATURES}))
-    best = model.best_iteration
+    params = {"objective": "binary:logistic", "eval_metric": "logloss", "max_depth": args.depth, "eta": args.eta,
+              "tree_method": "hist", "subsample": args.subsample, "colsample_bytree": args.colsample,
+              "min_child_weight": args.min_child_weight}
+    fit_matrix, valid_matrix = matrix(fit_rows), matrix(valid_rows)
+    models = []
+    for bag in range(args.bag):
+        model = xgb.train({**params, "seed": 3 + bag}, fit_matrix, num_boost_round=3000,
+                          evals=[(valid_matrix, "valid")], early_stopping_rounds=30, verbose_eval=200)
+        models.append((model, model.best_iteration))
+        model.save_model(args.output_dir / ("blend.json" if bag == 0 else f"blend_{bag}.json"))
+    (args.output_dir / "blend_meta.json").write_text(json.dumps({"features": FEATURES, "bag": args.bag}))
 
     def blend(frame: pl.DataFrame) -> pl.DataFrame:
         has = frame["ce_logit"].is_not_null().to_numpy()
         p = frame["p1"].to_numpy().astype(np.float32).copy()
         if has.any():
-            X = frame.filter(pl.Series(has)).select(FEATURES).to_numpy()
-            p[has] = model.predict(xgb.DMatrix(X, feature_names=FEATURES), iteration_range=(0, best + 1))
+            X = xgb.DMatrix(frame.filter(pl.Series(has)).select(FEATURES).to_numpy(), feature_names=FEATURES)
+            p[has] = np.mean([m.predict(X, iteration_range=(0, best + 1)) for m, best in models], axis=0)
         return frame.with_columns(p3=p)
 
     holdout = blend(train.filter(valid_mask))
     holdout.select("si", "ti", "p1", "p3", "label").rename({"p3": "p2"}).write_parquet(
         args.output_dir / "valid_predictions.parquet")
+    if args.holdout_only:
+        print("holdout only: test not scored", flush=True)
+        return
     test_ids, _ = id_frames(args.embed_dir, "test")
     chunks = []
     for chunk in range(args.test_chunks):

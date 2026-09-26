@@ -75,6 +75,17 @@ def house_segments(frame: pl.DataFrame, cache_dir: Path, split: str) -> pl.DataF
     return frame.with_columns(relation["segment"])
 
 
+def missing_segments(frame: pl.DataFrame, cache_dir: Path, split: str) -> pl.DataFrame:
+    """Split 'unknown' into targets without any address and the rest: the test holds more same-name decoys
+    without an address than the training data, while records without a house number are not affected."""
+    empty = pl.concat([pl.read_csv(cache_dir / f"{split}_source{i}.tsv", separator="\t", quote_char=None,
+                                   infer_schema=False, columns=["address"]) for i in (2, 3)])["address"].fill_null("") == ""
+    flag = pl.Series("t_empty", empty.to_numpy()[frame["ti"].to_numpy()])
+    return frame.with_columns(
+        pl.when((pl.col("segment") == "unknown") & flag).then(pl.lit("unknown_noaddr"))
+        .otherwise(pl.col("segment")).alias("segment"))
+
+
 def name_segments(frame: pl.DataFrame, cache_dir: Path, split: str, threshold: float = 0.95) -> pl.DataFrame:
     """Refine 'segment' by name agreement (IDF cosine of canonical names >= threshold):
     decoys usually carry a perturbed name, true records usually the same one."""

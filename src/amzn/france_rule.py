@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import glob
 import re
+import unicodedata
 from collections import Counter
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -48,23 +49,40 @@ def kind(name: str | None) -> str:
 STOP = {"de", "du", "des", "la", "le", "les", "l", "d", "et", "and", "the", "of", "&"}
 
 
-def initials(name: str, stop: bool) -> str:
-    words = re.findall(r"[a-z0-9]+", (name or "").lower())
-    return "".join(w[0] for w in words if not (stop and w in STOP))
+LEGAL = {"sarl", "sas", "sasu", "sa", "eurl", "sci", "snc", "ei", "scop", "gie", "selarl"}
+
+
+def fold(text: str | None) -> str:
+    """Lower case without accents: 'École' and 'ÉPL' keep their initial E."""
+    return unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
+
+
+def initials(name: str) -> set[str]:
+    """Initials of a name, with and without articles and legal forms, reading hyphenated
+    words either as one word ('Saint-Nazaire' gives S) or as several (S, N)."""
+    low = fold(name)
+    out = set()
+    for pattern in (r"[a-z0-9]+", r"[a-z0-9]+(?:-[a-z0-9]+)*"):
+        words = re.findall(pattern, low)
+        for drop_legal in (False, True):
+            for stop in (False, True):
+                kept = [w for w in words if not (stop and w in STOP) and not (drop_legal and w in LEGAL)]
+                if kept:
+                    out.add("".join(w[0] for w in kept))
+    return out
 
 
 def consistent(kind_: str, target: str, source: str, core: str) -> bool:
     """An acronym must spell the Source 1 initials; a domain must carry a Source 1 word or its initials.
     Decoy businesses at the same address have their own names, so their acronyms and domains differ."""
-    t = re.sub(r"[^a-z0-9]", "", (target or "").lower())
+    t = re.sub(r"[^a-z0-9]", "", fold(target))
     if kind_ == "alias":
         return True
+    variants = initials(source)
     if kind_ == "acronym":
-        return any(t and (init.startswith(t) or t.startswith(init[:2])) and init[:1] == t[:1]
-                   for init in (initials(source, True), initials(source, False)))
-    words = [w for w in (core or "").split() if len(w) >= 4]
-    return any(w in t for w in words) or any(len(i) >= 2 and t.startswith(i)
-                                             for i in (initials(source, True), initials(source, False)))
+        return any(t and (init.startswith(t) or t.startswith(init[:2])) and init[:1] == t[:1] for init in variants)
+    words = [w for w in fold(core).split() if len(w) >= 4]
+    return any(w in t for w in words) or any(len(i) >= 2 and t.startswith(i) for i in variants)
 
 
 def typo_close(a: str, b: str) -> bool:
@@ -151,8 +169,13 @@ def initials_pairs(s1: pl.DataFrame, targets: pl.DataFrame, country: str, taken:
     acronyms low (median p1 0.35) because such names recur across many targets."""
     gen = pl.read_parquet("cache/gen/test.parquet", columns=["si", "ti", "g_acronym", "g_domain", "g_consistent"])
     local = s1.filter(pl.col("country") == country).select("si")
-    cand = gen.join(local, on="si", how="semi").filter(
-        ((pl.col("g_acronym") == 1) | (pl.col("g_domain") == 1)) & (pl.col("g_consistent") == 1))
+    cand = gen.join(local, on="si", how="semi").filter((pl.col("g_acronym") == 1) | (pl.col("g_domain") == 1))
+    s_core = read("cache/test_source1.tsv").select("entity_id", "name_core")
+    cand = (cand.join(s1.select("si", "entity_id", pl.col("business_name").alias("s_name")), on="si")
+            .join(s_core, on="entity_id").join(targets.select("ti", pl.col("business_name").alias("t_name")), on="ti"))
+    cand = cand.filter(pl.Series([consistent("acronym" if a == 1 else "domain", t, s_, c) for a, t, s_, c in zip(
+        cand["g_acronym"].to_list(), cand["t_name"].to_list(), cand["s_name"].to_list(), cand["name_core"].to_list())],
+        dtype=pl.Boolean)).select("si", "ti", "g_acronym")
     feats = pl.concat([pl.read_parquet(path, columns=["si", "ti", "house_conflict", "address_idf_cos"])
                        .join(cand.select("si", "ti"), on=["si", "ti"], how="semi")
                        for path in sorted(glob.glob("cache/v3/test/part*.parquet"))])

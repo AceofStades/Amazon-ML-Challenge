@@ -36,6 +36,10 @@ def calibrated(holdout: pl.DataFrame, test: pl.DataFrame, column: str, cache_dir
         return apply_per_bin(live, column, per_bin(holdout, live, column, 0.02, 25), 0.02)
     live = house_segments(live, cache_dir, "test")
     held = house_segments(holdout, cache_dir, "train")
+    if mode == "segment-noaddr":
+        from .calibrate import missing_segments
+        live = missing_segments(live, cache_dir, "test")
+        held = missing_segments(held, cache_dir, "train")
     if mode == "segment-name":
         from .calibrate import name_segments
         live = name_segments(live, cache_dir, "test")
@@ -50,9 +54,9 @@ def main() -> None:
     parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
     parser.add_argument("--embed-dir", type=Path, default=Path("cache/embeddings"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/hybrid"))
-    parser.add_argument("--calibration", choices=("segment", "segment-name"), default="segment",
+    parser.add_argument("--calibration", choices=("segment", "segment-name", "segment-noaddr"), default="segment",
                         help="Label-shift correction for countries with labels")
-    parser.add_argument("--fallback-calibration", choices=("segment", "segment-name", "uniform", "none"),
+    parser.add_argument("--fallback-calibration", choices=("segment", "segment-name", "segment-noaddr", "uniform", "none"),
                         default="segment",
                         help="Label-shift correction for countries without labels")
     parser.add_argument("--fallback-odds", type=float, default=1.0,

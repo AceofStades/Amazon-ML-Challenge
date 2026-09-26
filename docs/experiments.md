@@ -358,3 +358,19 @@ matches (2.83M pairs, 73% positive): the region where the blend uses cross-encod
 Holdout F0.5 (in candidates): blend_v7_fullL 0.99160; + e5-base (fullLB) 0.99174; + gen features (genLB) 0.99186.
 File 7 = genLB for US/India + file-6 France rules (US -5.0k/+1.8k pairs, India -3.0k/+2.4k vs file 6).
 cyclop5 Kaggle account: kernels ran with 0 GPUs and no internet (phone verification missing).
+
+## Leaderboard: France rules and gen blend
+
+| File | Change | Leaderboard |
+|---|---|---|
+| 6 | best + France patterns - conflicts - swaps + initials | 0.987207 (rank 47) |
+| 7 | 6 + gen-feature blend with e5-base for US/India | 0.987379 (rank 44) |
+
+The France rules added +0.0019 overall (about +0.013 France F0.5); the new blend +0.00017.
+Top team 0.990788.
+
+Checked and rejected on the holdout or by counts: topping up entities that have one or two accepted matches
+(best rejected same-address candidate is 45-73% true), blend tuning (depth 8, eta 0.05, 5-model bagging:
+0.99166-0.99173 vs 0.99186), a no-address calibration segment (curve unchanged), dropping France brands
+(France accepts only 553 pure made-up brands). Accepted pairs per entity by house relation match the holdout
+for US and India, so the extra test decoys are already kept out there.
