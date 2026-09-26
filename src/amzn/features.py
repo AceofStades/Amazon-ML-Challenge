@@ -28,9 +28,12 @@ SECOND_STAGE_FEATURE_NAMES = FEATURE_NAMES + (
 
 def create_features(
     connection: duckdb.DuckDBPyConnection, split: str, candidates: str, output: str,
-    include_seed_features: bool = False,
+    include_seed_features: bool = False, left_table: str | None = None,
 ) -> None:
+    """Pair features; `left_table` replaces Source 1 (e.g. targets for target pairs)."""
     assert split in {"train", "test"}
+    left_table = left_table or f"{split}_source1"
+    assert left_table.replace("_", "").isalnum()
     assert candidates.replace("_", "").isalnum()
     assert output.replace("_", "").isalnum()
     seed_fields = (
@@ -121,7 +124,7 @@ def create_features(
                     THEN abs(length(s.house) - length(t.house)) ELSE -1 END::FLOAT AS house_length_diff
                {seed_fields}
         FROM {candidates} c
-        JOIN {split}_source1 s ON c.source1_entity_id = s.entity_id
+        JOIN {left_table} s ON c.source1_entity_id = s.entity_id
         JOIN {split}_targets t ON c.candidate_entity_id = t.entity_id
     """)
     count = connection.execute(f"SELECT count(*) FROM {output}").fetchone()[0]
