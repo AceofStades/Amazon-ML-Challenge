@@ -23,7 +23,7 @@ from transformers import AutoModel, AutoTokenizer
 CONFIG = {
     "model": "intfloat/multilingual-e5-large",
     "max_length": 128,
-    "batch_per_gpu": 48,
+    "batch_per_gpu": 40,
     "lr": 2e-5,
     "max_pairs": 3_000_000,
     "valid_pairs": 30_000,
@@ -88,13 +88,18 @@ def worker(rank: int, world: int, a, b, labels) -> None:
     torch.cuda.set_device(rank)
     torch.manual_seed(0)
     tokenizer = AutoTokenizer.from_pretrained(CONFIG["model"])
-    model = CrossEncoder(CONFIG["model"]).cuda(rank)
+    model = CrossEncoder(CONFIG["model"])
+    # The 250k-token embedding matrix is half of the parameters; freezing it keeps
+    # optimizer state within a 15 GB T4.
+    model.model.embeddings.word_embeddings.weight.requires_grad_(False)
+    model = model.cuda(rank)
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
     valid = CONFIG["valid_pairs"]
     train_index = np.arange(valid, len(labels))
     lengths = np.fromiter((len(a[i]) + len(b[i]) for i in train_index), np.int32, len(train_index))
     plan = batches(lengths, CONFIG["batch_per_gpu"], rank, world, seed=1)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=CONFIG["lr"], weight_decay=0.01)
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=CONFIG["lr"],
+                                  weight_decay=0.01, foreach=False)
     total = len(plan)
     warmup = max(1, total // 20)
     scheduler = torch.optim.lr_scheduler.LambdaLR(
