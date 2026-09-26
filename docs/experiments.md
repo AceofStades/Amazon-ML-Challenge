@@ -283,3 +283,11 @@ same-name records at other numbers stay unassigned. The optional --drop-conflict
 accepted France pairs with conflicting house numbers; a sample mixes decoys with true records whose number was
 randomized, so it is not part of the default output. Candidate recall for exact name+address pairs is 100% in
 every country.
+
+## Covariate-shift adaptation for France (shelved)
+
+A domain classifier separates France test pairs from training pairs almost perfectly (top features: name duplicate
+counts, neighbour-similarity profile, address similarity), so most training pairs get the minimum weight. The
+weighted stage-1 refit reached holdout logloss 0.061 by round 1000 (worse than the unweighted model) and then
+crashed twice with SIGSEGV inside XGBoost 3.4.1 CPU histogram building with sample weights. Shelved in favour of
+the France recall rule, which needs no retraining.
