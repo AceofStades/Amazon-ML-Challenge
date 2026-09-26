@@ -138,6 +138,19 @@ def score(args: argparse.Namespace) -> None:
     print(f"wrote {args.output}: {len(result):,} pairs", flush=True)
 
 
+def select(args: argparse.Namespace) -> None:
+    """Pairs worth a cross-encoder pass: stage-1 score >= --floor (train: buckets < 100)."""
+    p1 = pl.scan_parquet(Path(args.model_dir) / f"{args.split}_p1" / "*.parquet").filter(pl.col("p1") >= args.floor)
+    if args.split == "train":
+        ids = pl.read_parquet(Path(args.embed_dir) / "train_source1_ids.parquet").select("entity_id").with_row_index("si")
+        keep = duckdb.sql(f"SELECT si FROM ids WHERE hash(entity_id) % 1000 < {int(args.max_bucket)}").pl()
+        p1 = p1.join(keep.lazy().with_columns(pl.col("si").cast(pl.UInt32)), on="si", how="semi")
+    pairs = p1.select(pl.col("si").cast(pl.Int64), pl.col("ti").cast(pl.Int64)).collect()
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    pairs.write_parquet(args.output)
+    print(f"selected {pairs.height:,} {args.split} pairs with p1 >= {args.floor}", flush=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -157,10 +170,17 @@ def main() -> None:
     p.add_argument("--pairs", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--batch-size", type=int, default=512)
+    p = sub.add_parser("select")
+    p.add_argument("--split", choices=("train", "test"), required=True)
+    p.add_argument("--model-dir", default="output/v4")
+    p.add_argument("--embed-dir", default="cache/embeddings")
+    p.add_argument("--floor", type=float, default=0.01)
+    p.add_argument("--max-bucket", type=int, default=100)
+    p.add_argument("--output", required=True)
     args = parser.parse_args()
-    if getattr(args, "data_dir", None) is None:
+    if getattr(args, "data_dir", None) is None and hasattr(args, "split"):
         args.data_dir = f"dataset/{args.split}"
-    {"train": train, "score": score}[args.command](args)
+    {"train": train, "score": score, "select": select}[args.command](args)
 
 
 if __name__ == "__main__":
