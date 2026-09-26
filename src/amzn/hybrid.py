@@ -57,11 +57,13 @@ def main() -> None:
     unknown = fallback_test.filter(~pl.col("country").is_in(list(labelled)))
     parts = []
     if known.height:
-        parts.append(calibrated(holdout, known, "p2", args.cache_dir).select("si", "ti", pl.col("p2").alias("p")))
+        parts.append(calibrated(holdout, known.with_columns(pl.col("p2").alias("raw")), "p2", args.cache_dir)
+                     .select("si", "ti", pl.col("p2").alias("p"), "raw"))
     if unknown.height:
-        parts.append(calibrated(fallback_holdout, unknown, "p1", args.cache_dir)
-                     .select("si", "ti", pl.col("p1").alias("p")))
-    scored = one_to_one(pl.concat(parts), "p")
+        parts.append(calibrated(fallback_holdout, unknown.with_columns(pl.col("p1").alias("raw")), "p1", args.cache_dir)
+                     .select("si", "ti", pl.col("p1").alias("p"), "raw"))
+    # Calibration maps every top raw score to 1.0; the raw score picks the single owner of a target.
+    scored = one_to_one(pl.concat(parts), "p", tiebreak="raw")
     chosen = decode(scored["si"].to_numpy(), scored["ti"].to_numpy(), scored["p"].to_numpy(), "expected", 0.05, 0.0)
 
     s_ids, t_ids = id_frames(args.embed_dir, "test")

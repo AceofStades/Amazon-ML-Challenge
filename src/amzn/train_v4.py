@@ -356,11 +356,16 @@ def score_stage2(args: argparse.Namespace, split: str) -> pl.DataFrame:
     return frame
 
 
-def one_to_one(frame: pl.DataFrame, column: str) -> pl.DataFrame:
-    best = frame.group_by("ti").agg(pl.col(column).max().alias("best"))
-    return frame.join(best, on="ti").with_columns(
-        pl.when(pl.col(column) < pl.col("best")).then(0.0).otherwise(pl.col(column)).alias(column)
-    ).drop("best")
+def one_to_one(frame: pl.DataFrame, column: str, tiebreak: str | None = None) -> pl.DataFrame:
+    """Keep exactly one claimant per target; every other pair of that target scores 0.
+    Calibration maps all top raw scores to the same posterior (1.0), so ties are broken
+    by the raw score (tiebreak), then by si."""
+    keys = [column] + ([tiebreak] if tiebreak else []) + ["si"]
+    ranked = (frame.with_row_index("_row")
+              .sort(["ti", *keys], descending=[False] + [True] * (len(keys) - 1) + [False]))
+    winner = ranked["ti"].is_first_distinct()
+    return (ranked.with_columns(pl.when(winner).then(pl.col(column)).otherwise(0.0).alias(column))
+            .sort("_row").drop("_row"))
 
 
 def evaluate(args: argparse.Namespace) -> None:
@@ -410,6 +415,7 @@ def write_test(args: argparse.Namespace) -> None:
     best = args.decode_config or json.loads((args.stage2_dir / "evaluation.json").read_text())["best"]
     column, o2o, mode, th, mass = best.split("_")
     frame = pl.read_parquet(args.stage2_dir / "test_scored.parquet")
+    frame = frame.with_columns(pl.col(column).alias("raw"))
     candidates = frame.select("si", "ti")
     if args.calibrate:
         from .calibrate import apply_per_bin, apply_per_segment, house_segments, per_bin, per_segment
@@ -429,7 +435,7 @@ def write_test(args: argparse.Namespace) -> None:
             frame = apply_per_bin(test, column, fits, 0.02).drop("country")
         (args.output_dir / "calibration.json").write_text(json.dumps(fits, indent=1))
     if o2o == "o2o":
-        frame = one_to_one(frame, column)
+        frame = one_to_one(frame, column, tiebreak="raw")
     chosen = decode(frame["si"].to_numpy(), frame["ti"].to_numpy(), frame[column].to_numpy(),
                     mode, float(th), float(mass))
     s_ids, t_ids = id_frames(args.embed_dir, "test")

@@ -141,12 +141,13 @@ def decode(si: np.ndarray, targets: np.ndarray, p: np.ndarray, mode: str, thresh
         if mode == "threshold":
             k = int((probs >= threshold).sum())
         else:
-            # Expected F0.5 ~ 1.25*TP / (0.25*A + k) with A the expected true count.
+            # Expected F0.5 ~ P(any match) * 1.25*TP / (0.25*A + k), with TP and A the expected
+            # counts given at least one match (each divided by P(any match)).
             actual = probs.sum() + recall_mass
             empty = float(np.prod(1 - probs))
             tp = np.cumsum(probs)
             ks = np.arange(1, len(probs) + 1)
-            gain = 1.25 * tp / (0.25 * actual + ks) * (1 - empty)
+            gain = 1.25 * tp / (0.25 * actual / max(1 - empty, 1e-12) + ks)
             gain = np.where(probs >= threshold, gain, -1)
             best = int(np.argmax(gain))
             k = best + 1 if gain[best] > empty else 0
