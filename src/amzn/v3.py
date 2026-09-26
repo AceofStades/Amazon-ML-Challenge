@@ -248,6 +248,8 @@ def build_features(args: argparse.Namespace) -> None:
     folder = Path(args.embed_dir)
     out_dir = Path(args.cache_dir) / "v3" / args.split
     out_dir.mkdir(parents=True, exist_ok=True)
+    for stale in out_dir.glob("part*.parquet"):
+        stale.unlink()
     connection = connect(Path(args.database), Path(args.cache_dir))
     candidates = f"{args.split}_v3_candidates"
     features = f"{args.split}_v3_features"
@@ -285,7 +287,7 @@ def build_features(args: argparse.Namespace) -> None:
     for part in range(args.partitions):
         started = time.time()
         frame = connection.execute(f"""
-            SELECT * FROM {features}
+            SELECT *, (hash(source1_entity_id) % 1000)::SMALLINT AS bucket FROM {features}
             WHERE hash(source1_entity_id) % {args.partitions} = {part}
         """).pl()
         frame = (
