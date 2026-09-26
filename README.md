@@ -36,9 +36,19 @@ uv run python -m amzn.v3 features --split train --partitions 32
 uv run python -m amzn.v3 candidates --split test
 uv run python -m amzn.v3 features --split test --partitions 16
 
-# 5. Two-stage matcher, holdout evaluation, calibrated test decoding.
-uv run python -m amzn.train_v4 stage1 p1_train p1_test stage2 p2_train p2_test evaluate --model-dir output/v4
-uv run python -m amzn.train_v4 write --model-dir output/v4 --output-dir output --calibrate
+# 5. Stage-1 matcher (4 folds; out-of-fold scores for every training pair).
+uv run python -m amzn.train_v4 stage1 p1_train p1_test --model-dir output/v6 --pair-house
+
+# 6. Cross-encoder: train on encoder hard negatives (buckets >= 100), score pairs with stage-1 p >= 0.01.
+uv run python -m amzn.crossenc train
+uv run python -m amzn.crossenc select --split train --model-dir output/v6 --output cache/ce/train_pairs.parquet
+uv run python -m amzn.crossenc select --split test --model-dir output/v6 --output cache/ce/test_pairs.parquet
+uv run python -m amzn.crossenc score --split train --pairs cache/ce/train_pairs.parquet --output cache/ce/train_scores.parquet
+uv run python -m amzn.crossenc score --split test --pairs cache/ce/test_pairs.parquet --output cache/ce/test_scores.parquet
+
+# 7. Pairwise blend (stage 1 + cross-encoder), per-country scorer choice, calibration, decoding.
+uv run python -m amzn.blend --model-dir output/v6 --extras name --output-dir output/blend
+uv run python -m amzn.hybrid --blend-dir output/blend --output-dir output
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
     --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids
@@ -57,11 +67,17 @@ final matcher scored. `docs/experiments.md` records every holdout and leaderboar
   training entities: keys 0.934, encoder top 40 0.997, union 0.997.
 - **Features**: string similarities, IDF-weighted token overlap, legal-form agreement, house-number similarity,
   embedding similarity, reverse-neighbour competition, and sibling agreement among the candidates of a record.
-- **Matcher**: stage-1 XGBoost (4 folds, out-of-fold scores for every training pair). Stage-2 XGBoost adds the
-  score context of each Source 1 entity, per-target competition across Source 1 entities, and house-number cluster
-  evidence.
+- **Matcher**: stage-1 XGBoost over pairwise features (4 folds, out-of-fold scores for every training pair).
+  A fine-tuned multilingual cross-encoder rescores pairs with stage-1 p >= 0.01, and a shallow XGBoost blends the two
+  scores with name-genericness inputs. Entity-context features (a second stage) raise holdout F0.5 but amplify the
+  test decoys, so the final scorer stays pairwise.
+- **Countries without labels**: the blend and cross-encoder are fitted where names are distinctive (US, India). For
+  any country absent from the labelled holdout the stage-1 score is used instead; France, whose names are generic
+  ("Lille Ecole SARL" exists many times), falls in this group automatically.
 - **Decoding**: each target goes to at most one Source 1 entity, then the candidate prefix with the highest expected
   F0.5 is chosen (an empty list included).
-- **Label shift**: the test set holds about twice as many look-alike decoy records per entity as the training data.
-  Per score bin, holdout positives per entity are kept and extra test pairs count as negatives. The corrected
-  posterior replaces the raw score before decoding (`amzn.calibrate`).
+- **Label shift**: the test set holds about twice as many look-alike decoy records per entity as the training data,
+  concentrated at nearby house numbers. Per country, house relation (equal, conflict, unknown) and score bin, holdout
+  positives per entity are kept and extra test pairs count as negatives; the corrected posterior replaces the raw
+  score before decoding (`amzn.calibrate`). `amzn.estimate` samples labels from these posteriors to rank candidate
+  submissions without test labels.
