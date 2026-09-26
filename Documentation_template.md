@@ -14,7 +14,7 @@ The pipeline links each Source 1 record to the Source 2/3 records of the same bu
 2. Candidate generation, as the union of rare-key blocking and nearest neighbours from a fine-tuned multilingual
    bi-encoder (pair recall 0.997).
 3. A pairwise XGBoost matcher over 67 string, IDF, legal-form, house-number and embedding features.
-4. A fine-tuned multilingual cross-encoder, blended with the matcher for countries that have training labels.
+4. Two fine-tuned multilingual cross-encoders, blended with the matcher for countries that have training labels.
 5. Set-level decoding that maximizes expected F0.5 per Source 1 entity, with at most one Source 1 entity per
    target record.
 
@@ -47,6 +47,10 @@ Normalization (`normalize.py`, `translit.py`):
   RTE, ST. = Saint, and others).
 - **Regions.** Each US state, Indian state and French region/department collapses to one canonical token, so
   "Texas" equals "TX" and "Gironde" equals "Nouvelle-Aquitaine".
+- **Legal forms and suffixes.** Runs of single letters are merged ("S.A.R.L." becomes "sarl", "L.L.C." becomes
+  "llc"). Legal forms and the suffixes the data adds to French names (Cie, Compagnie, & Fils, Frères, Associés,
+  Groupe, Développement) are dropped from the canonical name, as "Inc" or "Pvt Ltd" are. Without this, true French
+  records scored in the middle of the range because the model had never seen those suffixes in US/Indian data.
 - **Derived fields.** Sorted canonical name/address strings, the house number, and anchor tokens.
 - **Country** is an open string label. The pipeline has no US/India-only branch.
 
@@ -88,9 +92,9 @@ Source 1 record (108M test pairs instead of 17 trillion possible pairs).
 0-99 except the holdout (buckets 50-59), with four folds. Every training pair gets an out-of-fold score; the test
 gets the fold average.
 
-**Cross-encoder:** `intfloat/multilingual-e5-small` (MIT) fine-tuned as a pair classifier on 3.2M hard pairs
-(encoder top-8 neighbours plus all true links) from training entities in buckets >= 100. It rescores every pair
-with stage-1 p >= 0.01 (8.7M test pairs).
+**Cross-encoders:** two copies of `intfloat/multilingual-e5-small` (MIT) fine-tuned as pair classifiers on hard
+pairs (encoder top-8 neighbours plus all true links). They use different training entities from buckets >= 100:
+3.2M and 4.8M pairs. They rescore every pair with stage-1 p >= 0.01 (8.8M test pairs).
 
 **Pairwise blend:** a shallow XGBoost (depth 3) combines logit(stage-1 p), the cross-encoder logit, and
 name-genericness inputs (name duplicate counts, IDF of shared tokens, house agreement). It is fitted on
