@@ -53,7 +53,7 @@ def training_pairs(args: argparse.Namespace) -> pl.DataFrame:
     t_ids = pl.concat([pl.read_parquet(embed / f"train_source{i}_ids.parquet").select("entity_id")
                        for i in (2, 3)]).with_row_index("ti")
     buckets = duckdb.sql("SELECT si, hash(entity_id) % 1000 AS bucket FROM s_ids").pl()
-    chosen = buckets.filter(pl.col("bucket") >= args.min_bucket).sample(n=args.entities, seed=1)["si"]
+    chosen = buckets.filter(pl.col("bucket") >= args.min_bucket).sample(n=args.entities, seed=args.seed)["si"]
     knn = (pl.scan_parquet(embed / "train_knn.parquet")
            .filter((pl.col("rank") <= args.depth) & pl.col("q").is_in(chosen.implode()))
            .select(pl.col("q").alias("si"), pl.col("d").alias("ti")).collect())
@@ -70,11 +70,11 @@ def training_pairs(args: argparse.Namespace) -> pl.DataFrame:
     pairs = pl.concat([knn.with_columns(cast), positives.with_columns(cast)]).unique()
     pairs = pairs.join(truth, on=["si", "ti"], how="left").with_columns(pl.col("label").fill_null(0.0))
     print(f"cross-encoder pairs {pairs.height:,}, positive rate {pairs['label'].mean():.3f}", flush=True)
-    return pairs.sample(fraction=1.0, shuffle=True, seed=2)
+    return pairs.sample(fraction=1.0, shuffle=True, seed=args.seed + 1)
 
 
 def train(args: argparse.Namespace) -> None:
-    torch.manual_seed(0)
+    torch.manual_seed(args.seed)
     pairs = training_pairs(args)
     source1, targets = record_texts(Path(args.data_dir), "train")
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
@@ -163,6 +163,7 @@ def main() -> None:
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--lr", type=float, default=4e-5)
     p.add_argument("--min-bucket", type=int, default=100)
+    p.add_argument("--seed", type=int, default=1)
     p = sub.add_parser("score")
     p.add_argument("--split", choices=("train", "test"), required=True)
     p.add_argument("--data-dir")
