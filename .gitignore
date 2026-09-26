@@ -7,3 +7,4 @@ __pycache__/
 cache/
 models/
 logs/
+kaggle/data/
