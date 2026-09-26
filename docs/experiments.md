@@ -160,3 +160,15 @@ and digit-difference shape to the closest target number. Blend with name-generic
 | v6 blend + name inputs | 0.9948 | 0.9958 | 0.9185 |
 
 Hybrid v6 (blend for labelled countries, stage 1 otherwise): projected 0.9921; 5,766,877 matches.
+
+## France noise vocabulary (v7 normalization)
+
+Tokens most often present in a target name but absent from its Source 1 name:
+- US/India true pairs: com, center, services, service, partners, lp, smt/shri/sri/mr/dr, dba/formerly/aka/fka/nee.
+- France confident pairs: dotted legal-form letters (s, a, r, u, e from S.A.R.L., S.A.S., E.U.R.L.), fils, france,
+  cie, groupe, associes, developpement, compagnie, frs.
+
+The English suffixes appear in training, so the model has learned them; the French ones are unseen and push true
+France records into mid scores. France's excess mid-score mass sits in the house-equal segment (p1 0.73-0.88:
+0.069 per entity against 0.017 expected positives). v7 merges runs of single letters ('s a r l' -> 'sarl') and
+treats cie, compagnie, fils, freres, frs, associes, groupe, developpement, pc, pllc, lp like legal forms.
