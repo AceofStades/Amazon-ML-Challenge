@@ -29,7 +29,24 @@ EMBED_FEATURES = (
     "name_idf_cos", "name_idf_max_shared", "name_idf_s_cover", "name_idf_t_cover",
     "name_idf_max_missing", "address_idf_cos", "address_idf_s_cover", "address_idf_t_cover",
     "s_name_dup", "t_name_dup", "s_name_in_targets",
+    "legal_both", "legal_equal", "legal_conflict",
 )
+
+LEGAL_FORMS = {
+    "inc": "inc", "incorporated": "inc", "llc": "llc", "ltd": "ltd", "limited": "ltd",
+    "corp": "corp", "corporation": "corp", "co": "co", "company": "co", "lp": "lp",
+    "llp": "llp", "plc": "plc", "pc": "pc", "pllc": "pllc", "pvt": "pvt", "private": "pvt",
+    "sarl": "sarl", "sas": "sas", "sasu": "sasu", "sa": "sa", "eurl": "eurl", "sci": "sci",
+    "snc": "snc", "gmbh": "gmbh", "ag": "ag", "bv": "bv", "nv": "nv", "srl": "srl", "spa": "spa",
+}
+
+
+def legal_forms(name: pl.Expr) -> pl.Expr:
+    """Canonical legal-form set; dotted forms like s a s are joined first."""
+    joined = name.str.replace_all(r"\b([a-z]) (?:([a-z]) )?(?:([a-z]) )?([a-z])\b", "$1$2$3$4")
+    return (joined.str.split(" ").list.eval(pl.element().replace_strict(LEGAL_FORMS, default=None))
+            .list.drop_nulls().list.unique().list.sort().list.join(","))
+
 
 
 def token_tables(cache_dir: Path, split: str) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -37,7 +54,7 @@ def token_tables(cache_dir: Path, split: str) -> tuple[pl.DataFrame, pl.DataFram
     records = pl.concat([
         pl.read_csv(cache_dir / f"{split}_source{i}.tsv", separator="	", quote_char=None,
                     infer_schema=False, missing_utf8_is_empty_string=True,
-                    columns=["entity_id", "country", "name_core", "address_core"])
+                    columns=["entity_id", "country", "name", "name_core", "address_core"])
         .with_columns(pl.lit(i == 1).alias("is_s1"))
         for i in (1, 2, 3)
     ])
@@ -51,7 +68,8 @@ def token_tables(cache_dir: Path, split: str) -> tuple[pl.DataFrame, pl.DataFram
         frames[field] = tokens.join(idf, on="tok")
     dup = records.filter(pl.col("name_core") != "").group_by("country", "name_core", "is_s1").agg(pl.len().alias("n"))
     counts = records.join(dup, on=["country", "name_core", "is_s1"], how="left").select(
-        "entity_id", pl.col("n").fill_null(0).cast(pl.Float32).alias("name_dup"))
+        "entity_id", pl.col("n").fill_null(0).cast(pl.Float32).alias("name_dup"),
+        legal_forms(pl.col("name")).alias("forms"))
     s1_names = records.filter(pl.col("is_s1")).select("entity_id", "country", "name_core")
     in_targets = s1_names.join(dup.filter(~pl.col("is_s1")), on=["country", "name_core"], how="left").select(
         "entity_id", pl.col("n").fill_null(0).cast(pl.Float32).alias("s_name_in_targets"))
@@ -86,10 +104,17 @@ def idf_features(pairs: pl.DataFrame, frames: dict, counts: pl.DataFrame) -> pl.
         if field == "address":
             stats = stats.drop("address_idf_max_shared", "address_idf_max_missing")
         pairs = pairs.join(stats, on="pair", how="left")
-    s_counts = counts.select("entity_id", pl.col("name_dup").alias("s_name_dup"), "s_name_in_targets")
-    t_counts = counts.select("entity_id", pl.col("name_dup").alias("t_name_dup"))
+    s_counts = counts.select("entity_id", pl.col("name_dup").alias("s_name_dup"), "s_name_in_targets",
+                             pl.col("forms").alias("s_forms"))
+    t_counts = counts.select("entity_id", pl.col("name_dup").alias("t_name_dup"), pl.col("forms").alias("t_forms"))
     pairs = (pairs.join(s_counts, left_on="source1_entity_id", right_on="entity_id", how="left")
              .join(t_counts, left_on="candidate_entity_id", right_on="entity_id", how="left"))
+    both = (pl.col("s_forms") != "") & (pl.col("t_forms") != "")
+    pairs = pairs.with_columns(
+        both.cast(pl.Float32).alias("legal_both"),
+        (both & (pl.col("s_forms") == pl.col("t_forms"))).cast(pl.Float32).alias("legal_equal"),
+        (both & (pl.col("s_forms") != pl.col("t_forms"))).cast(pl.Float32).alias("legal_conflict"),
+    ).drop("s_forms", "t_forms")
     return pairs.sort("pair").drop("pair").with_columns(pl.col(pl.Float64).cast(pl.Float32))
 
 
