@@ -143,9 +143,61 @@ def is_valid(frame: pl.DataFrame) -> pl.Expr:
     return (pl.col("bucket") >= VALID[0]) & (pl.col("bucket") < VALID[1])
 
 
+PAIR_HOUSE = ("s_house_in_t", "t_house_in_s", "house_min_gap", "closest_digit_diffs",
+              "closest_first_diff", "closest_last_diff", "closest_same_length")
+
+
+def address_numbers(cache_dir: Path, split: str) -> dict:
+    """First house number and all address numbers for Source 1 (si) and targets (ti)."""
+    def read(i: int) -> pl.DataFrame:
+        return pl.read_csv(cache_dir / f"{split}_source{i}.tsv", separator="\t", quote_char=None,
+                           infer_schema=False, columns=["house", "address"])
+    def numbers(frame: pl.DataFrame) -> pl.Series:
+        return frame["address"].fill_null("").str.extract_all(r"\d+").list.eval(
+            pl.element().str.strip_chars_start("0").replace("", "0"))
+    source1 = read(1)
+    targets = pl.concat([read(2), read(3)])
+    return {"s_house": source1["house"].fill_null("").to_numpy(), "s_numbers": numbers(source1),
+            "t_house": targets["house"].fill_null("").to_numpy(), "t_numbers": numbers(targets)}
+
+
+def pair_house_features(part: pl.DataFrame, numbers: dict) -> pl.DataFrame:
+    """Pairwise house evidence robust to noise prefixes such as 'Door No #834 House No 1958':
+    does either first house number appear anywhere in the other address, and how does the
+    Source 1 house number differ from the closest target number."""
+    si, ti = part["si"].to_numpy(), part["ti"].to_numpy()
+    frame = pl.DataFrame({
+        "row": np.arange(part.height), "hs": numbers["s_house"][si], "ht": numbers["t_house"][ti],
+        "s_nums": numbers["s_numbers"].gather(si), "t_nums": numbers["t_numbers"].gather(ti),
+    })
+    frame = frame.with_columns(
+        ((pl.col("hs") != "") & pl.col("t_nums").list.contains(pl.col("hs"))).cast(pl.Float32).alias("s_house_in_t"),
+        ((pl.col("ht") != "") & pl.col("s_nums").list.contains(pl.col("ht"))).cast(pl.Float32).alias("t_house_in_s"))
+    exploded = (frame.filter((pl.col("hs") != "") & (pl.col("t_nums").list.len() > 0))
+                .select("row", "hs", "t_nums").explode("t_nums")
+                .filter(pl.col("t_nums").str.len_chars() < 10)
+                .with_columns((pl.col("hs").cast(pl.Int64, strict=False)
+                               - pl.col("t_nums").cast(pl.Int64, strict=False)).abs().alias("gap"))
+                .sort("gap").group_by("row").agg(pl.col("gap").first(), pl.col("t_nums").first().alias("closest")))
+    frame = frame.join(exploded, on="row", how="left").sort("row")
+    shape = house_shape(frame["hs"], frame["closest"].fill_null(""))
+    return part.with_columns(
+        frame["s_house_in_t"], frame["t_house_in_s"],
+        pl.Series("house_min_gap", np.where(frame["gap"].is_null().to_numpy(), -1.0,
+                                            np.log1p(frame["gap"].fill_null(0).cast(pl.Float64).to_numpy()))
+                  .astype(np.float32)),
+        shape[1].alias("closest_digit_diffs"), shape[2].alias("closest_first_diff"),
+        shape[3].alias("closest_last_diff"), shape[4].alias("closest_same_length"))
+
+
 def load_training(args: argparse.Namespace) -> pl.DataFrame:
-    frames = [pl.read_parquet(p).filter(pl.col("bucket") < args.train_buckets)
-              for p in partitions(args.cache_dir, "train")]
+    numbers = address_numbers(args.cache_dir, "train") if args.pair_house else None
+    frames = []
+    for p in partitions(args.cache_dir, "train"):
+        part = pl.read_parquet(p).filter(pl.col("bucket") < args.train_buckets)
+        if numbers is not None:
+            part = pair_house_features(part, numbers)
+        frames.append(part)
     return attach_labels(pl.concat(frames), args.truth).sort("si", "ti")
 
 
@@ -190,8 +242,11 @@ def score_stage1(args: argparse.Namespace, split: str) -> None:
     models = load_models(args.model_dir, "stage1_fold*.json")
     out = args.model_dir / f"{split}_p1"
     out.mkdir(exist_ok=True)
+    numbers = address_numbers(args.cache_dir, split) if any(n in PAIR_HOUSE for n in names) else None
     for path in partitions(args.cache_dir, split):
-        part = pl.read_parquet(path, columns=["si", "ti", "bucket", *names])
+        part = pl.read_parquet(path, columns=["si", "ti", "bucket", *[n for n in names if n not in PAIR_HOUSE]])
+        if numbers is not None:
+            part = pair_house_features(part, numbers)
         X = xgb.DMatrix(part.select(names).cast(pl.Float32).to_numpy(), feature_names=names)
         scores = np.stack([predict(m, X) for m in models])
         p1 = scores.mean(0)
@@ -400,6 +455,8 @@ def main() -> None:
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--model-dir", type=Path, default=Path("output/v4"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/v4"))
+    parser.add_argument("--pair-house", action="store_true",
+                        help="Add address-wide pairwise house features to stage 1")
     parser.add_argument("--calibrate", action="store_true",
                         help="Apply the per-bin label-shift correction before decoding test")
     parser.add_argument("--calibrate-segments", action="store_true",
