@@ -43,6 +43,7 @@ Times are IST (UTC+5:30). Paths are relative to the repo root `~/code/amzn` on h
   **5 submissions**. File 10 uses the first one if the user submitted it before sleeping. Use them carefully.
 - **User's target (their "goal"):** rank 1, roughly 0.992 or better. The leader was at 0.990788–0.990816 on the
   night of Sep 26. Our best is **0.987379** (file 7). The rank was 44 and later dropped to 69 as others improved.
+  The latest user report is **rank 78, score 0.987379**, with an explicit target of **at least 0.992 and rank 1**.
 - **Leaderboard history:**
 
 | File | What | Score |
@@ -189,6 +190,15 @@ trained model from the training kernel's output), waits for it, and downloads `s
   (`models/crossencoder_base_bnd`), then scores into `cache/ce_base_bnd`. Expected to finish around 08:00–09:00.
   **After that the hades GPU is free.** One more local e5-base model (about 4 h train plus score) fits before evening.
 - **Never overlap two GPU jobs on hades.** 16 GB overflows and the process segfaults. Chain them.
+
+**Recovery update:** `gpu_chain.sh` terminated during hard2 test scoring with
+`free(): invalid pointer` at 4.86M/8.83M pairs. Hard2's final model and train
+scores are intact, but no test output exists. The boundary chain continues.
+`scripts/gpu_recover_hard2.sh 124580` waits for that boundary shell and every
+cross-encoder worker to finish, then recovers missing local outputs with
+checkpointed 250k-pair subprocesses and batch 128. Check
+`logs/gpu_recover_hard2.log`; never restart hard2 scoring alongside the boundary
+chain. The helper also recovers boundary scores if its original scorer fails.
 
 ---
 

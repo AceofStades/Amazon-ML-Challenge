@@ -506,3 +506,26 @@ The comparison uses held-out source buckets 50-59, global stage-1 target
 ownership over all training sources, all ground-truth links including links
 missing from candidates, and singleton entities. Results are recorded in
 `output/decode_exact_holdout.json` and `logs/decode_exact_holdout.log`.
+
+## Deferred recovery of local cross-encoder scoring (2026-09-27)
+
+The second hard e5-base model saved its checkpoint and completed 1,038,797
+training scores. Its original batch-512 test scorer aborted with
+`free(): invalid pointer` after logging 4,864,000 of 8,831,732 pairs. No test
+parquet or intermediate checkpoints were saved. CUDA allocation OOM warnings
+also occurred during train-pair scoring; these suggest memory pressure but do
+not establish the native crash's root cause. The boundary training chain remains live.
+
+A deferred recovery watcher waits for the captured boundary-chain process,
+every cross-encoder GPU worker, and GPU memory usage below 1,024 MiB. It
+preserves complete score files, recovers hard2 first, and then recovers missing
+or corrupt boundary scores if its final checkpoint exists. The coordinator
+scores 250,000-row chunks in fresh processes at batch size 128, validates row
+order and finite, non-null logits, and records immutable model/pair SHA-256
+identities. Completed chunks survive failures; incompatible manifests are
+rejected; the complete output is published atomically.
+
+Fourteen CPU fixture tests cover scoring, crash/resume, corrupted chunks,
+identity drift, invalid logits and deferred-launch guards. Shell syntax and
+Python compilation pass. Real GPU recovery remains unverified until the
+boundary chain releases the GPU. No existing training or running shell changes.
