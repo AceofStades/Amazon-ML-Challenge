@@ -95,3 +95,25 @@ separates holdout pairs better but test decoys still land mid-range.
 | Submission | Holdout | Leaderboard |
 |---|---|---|
 | v4 + per-bin correction | 0.98707 | pending |
+
+## Label-free test estimates (amzn.estimate)
+
+Labels are sampled from calibrated posteriors and the submitted decisions are scored (3 samples). The
+per-segment truth model splits pairs by house relation: 'equal' (the Source 1 house number appears among the
+target's address numbers), 'conflict', 'unknown'. Checked against v3 calibrated (actual 0.968379): the uniform
+truth model predicts 0.9753, the segmented one 0.9672, so the segmented model is used for decisions.
+
+| Scores | Calibration | Estimated test F0.5 |
+|---|---|---|
+| v3 stage 2 | per-segment | 0.97175 |
+| v4 stage 2 | per-segment | 0.97002 |
+| v4 stage 1 | per-segment | 0.97806 |
+
+Stage 2 context features (entity score sums, sibling support, house clusters, competition) amplify the test decoys:
+the test/holdout density ratio for p2 in the 0.74-0.92 bins is about 5 for US, against 1.4-1.7 for p1.
+
+House parsing artifact: noise prefixes such as 'Door No #834 House No 1958' made the first-number house field
+disagree with Source 1 on true records, so in training 98% of 'conflicting house cluster' pairs were matches.
+House relations now check the Source 1 house number against every number in the target address.
+
+Submissions prepared: v3_segcal (5,646,694 matches), v4p1_segcal (5,676,074 matches).
