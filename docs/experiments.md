@@ -117,3 +117,17 @@ disagree with Source 1 on true records, so in training 98% of 'conflicting house
 House relations now check the Source 1 house number against every number in the target address.
 
 Submissions prepared: v3_segcal (5,646,694 matches), v4p1_segcal (5,676,074 matches).
+
+## Pairwise blend: stage 1 + cross-encoder (amzn.blend)
+
+Shallow XGBoost on (logit p1, cross-encoder logit) for pairs with p1 >= 0.01, fitted on training entities in
+buckets < 100 outside the holdout (p1 out-of-fold, cross-encoder trained on buckets >= 100). Holdout logloss on
+the scored pairs: 0.0504 (stage 1 alone 0.0729).
+
+| Scores | Holdout F0.5 (in candidates) | Estimated test F0.5 (per-segment) |
+|---|---|---|
+| v4 stage 1 | 0.98392 | 0.97806 |
+| v4 stage 2 | 0.98770 | 0.97002 |
+| stage 1 + cross-encoder blend | 0.99040 | 0.98287 |
+
+Submission blend_segcal: 5,718,944 matches; US 3.37, India 3.38, France 2.89 per entity.

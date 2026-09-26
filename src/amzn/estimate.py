@@ -75,6 +75,7 @@ if __name__ == "__main__":
         "v3seg": ("output/v3_legal", "p2", True, "v3 p2 segmented", "test_scored_pairs.parquet", True),
         "v4p2seg": ("output/v4", "p2", True, "v4 p2 segmented", "test_scored.parquet", True),
         "v4p1seg": ("output/v4", "p1", True, "v4 p1 segmented", "test_scored.parquet", True),
+        "blendseg": ("output/v4_blend", "p2", True, "v4 p1+CE blend segmented", "test_scored.parquet", True),
     }
     for name in sys.argv[1:] or jobs:
         run(*jobs[name])
