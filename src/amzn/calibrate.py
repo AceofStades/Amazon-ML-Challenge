@@ -101,7 +101,7 @@ def per_segment(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: f
             posterior = np.clip(a * n1 / np.maximum(m, 1e-9), 0, 1)
             posterior[m < 1e-6] = np.nan
             # Empty cells borrow from the neighbour below; then force monotone.
-            posterior = pl.Series(posterior).fill_nan(None).fill_null(strategy="forward").fill_null(0.0).to_numpy()
+            posterior = pl.Series(posterior).fill_nan(None).fill_null(strategy="forward").fill_null(0.0).to_numpy().copy()
             posterior[0] = min(posterior[0], posterior[1])
             posterior = np.maximum.accumulate(posterior)
             result[f"{country}|{segment}"] = {"a": a, "edges": edges.tolist(), "posterior": posterior.round(4).tolist()}
