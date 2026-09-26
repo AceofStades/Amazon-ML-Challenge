@@ -35,11 +35,16 @@ def with_features(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.with_columns((p / (1 - p)).log().alias("logit_p1"))
 
 
-def load(model_dir: Path, ce_dir: Path, split: str, extras: set[str], cache_dir: Path = Path("cache")) -> pl.DataFrame:
+def load(model_dir: Path, ce_dir: Path, split: str, extras: set[str], cache_dir: Path = Path("cache"),
+         second: Path | None = None) -> pl.DataFrame:
     p1 = pl.scan_parquet(model_dir / f"{split}_p1" / "*.parquet")
     ce = pl.scan_parquet(ce_dir / f"{split}_scores.parquet").with_columns(
         pl.col("si").cast(pl.UInt32), pl.col("ti").cast(pl.UInt32))
     frame = p1.join(ce, on=["si", "ti"], how="left").collect()
+    if second is not None:
+        other = pl.scan_parquet(second / f"{split}_p1" / "*.parquet").rename({"p1": "p1b"}).collect()
+        p = pl.col("p1b").clip(1e-6, 1 - 1e-6)
+        frame = frame.join(other, on=["si", "ti"], how="left").with_columns((p / (1 - p)).log().alias("logit_p1b"))
     if "name" in extras:
         import glob
         live = frame.filter(pl.col("ce_logit").is_not_null()).select("si", "ti")
@@ -83,15 +88,16 @@ def main() -> None:
     parser.add_argument("--embed-dir", type=Path, default=Path("cache/embeddings"))
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/v4_blend"))
-    parser.add_argument("--extras", default="", help="comma list: house, tt")
+    parser.add_argument("--extras", default="", help="comma list: house, tt, name")
+    parser.add_argument("--second-model-dir", type=Path, help="Another stage-1 run to blend in")
     args = parser.parse_args()
     extras = {e for e in args.extras.split(",") if e}
     global FEATURES
     FEATURES = (BASE + (HOUSE if "house" in extras else []) + (TT if "tt" in extras else [])
-                + (NAME if "name" in extras else []))
+                + (NAME if "name" in extras else []) + (["logit_p1b"] if args.second_model_dir else []))
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    train = load(args.model_dir, args.ce_dir, "train", extras)
+    train = load(args.model_dir, args.ce_dir, "train", extras, second=args.second_model_dir)
     s_ids, _ = id_frames(args.embed_dir, "train")
     buckets = duckdb.sql("SELECT si, (hash(entity_id) % 1000)::INT AS bucket FROM s_ids").pl()
     train = train.join(buckets.with_columns(pl.col("si").cast(pl.UInt32)), on="si").filter(pl.col("bucket") < 100)
@@ -122,7 +128,7 @@ def main() -> None:
     holdout = blend(train.filter(valid_mask))
     holdout.select("si", "ti", "p1", "p3", "label").rename({"p3": "p2"}).write_parquet(
         args.output_dir / "valid_predictions.parquet")
-    test = blend(load(args.model_dir, args.ce_dir, "test", extras))
+    test = blend(load(args.model_dir, args.ce_dir, "test", extras, second=args.second_model_dir))
     test.select("si", "ti", "p1", pl.col("p3").alias("p2")).with_columns(pl.lit(0, pl.Int16).alias("bucket")).write_parquet(
         args.output_dir / "test_scored.parquet")
     (args.output_dir / "evaluation.json").write_text(json.dumps({"best": "p2_o2o_expected_0.05_0.0"}))
