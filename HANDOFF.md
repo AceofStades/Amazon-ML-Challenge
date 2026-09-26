@@ -65,6 +65,8 @@ Times are IST (UTC+5:30). Paths are relative to the repo root `~/code/amzn` on h
 - **Commits:** never add AI attribution. No "Co-Authored-By" line, no "generated with" line. Commit often, one
   small meaningful commit per step, and **push after every commit** (`git push origin hmm`) so teammates always see
   the latest code. Work directly in `~/code/amzn` on hades.
+  The user also requests **more than 100 meaningful commits on September 27** (at least 101, counted in IST).
+  There were 17 commits dated September 27 at 04:05 IST. Do not pad the history with empty or cosmetic commits.
 - **Submission files:** stage them in `output/to_submit/` as
   `<N>_<short_description>_matching_results.tsv`, so the user knows exactly what to upload. Keep `INDEX.txt` there
   up to date with the reasoning, the expected score and the leaderboard history. Move submitted files to
@@ -188,6 +190,13 @@ trained model from the training kernel's output), waits for it, and downloads `s
 ---
 
 ## 7. Plan for the rest of Sep 27
+
+The resumed session prepares `scripts/noon_build.sh fleetA` for a detached
+11:00 IST start. It waits for the shared pipeline lock, runs the final assembly,
+and stages validated file 11 with hardlinks, an index entry, and an experiment
+log commit. Check `logs/noon_fleetA.log` and the host process list before starting
+another final assembly. Both pipeline scripts now use `logs/blend.lock` to avoid
+overlap; an auto-blend started before this change finishes normally.
 
 1. **Around 11:00–12:00, build the noon submission** with every CE that has landed:
    `./scripts/final_assemble.sh fleetA` (about 25–30 min). It runs these steps:
