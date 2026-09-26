@@ -191,3 +191,16 @@ Holdout loss breakdown for the v6 blend (F0.5 0.9900 including the recall ceilin
 Holdout logloss on rescored pairs: first 0.0759, second 0.0729, logit mean 0.0724. Blend with both (plus name
 inputs): logloss 0.0476 (single 0.0489), holdout F0.5 0.99028 (single 0.99007); projected US 0.9943,
 India 0.9960 (single: 0.9945, 0.9961), i.e. a tie on test. Submission hybrid_v7ab: 5,812,412 matches.
+
+## Full blend (stage-1 features + both cross-encoders, depth 6)
+
+On pairs with stage-1 p >= 0.01 the blend also sees all stored stage-1 features (a 'stage 1.5' on the uncertain
+subset). Holdout logloss 0.0466 (two-cross-encoder depth-3 blend: 0.0476); holdout F0.5 0.99046 (0.99028).
+
+| Scores | US | India | France |
+|---|---|---|---|
+| full blend | 0.9948 | 0.9964 | 0.9221 |
+| v7 stage 1 (France fallback) | | | 0.9802 |
+
+A cross-encoder veto for France (min of stage 1 and blend) projects 0.9756, worse than stage 1 alone.
+Hybrid v7full: projected 0.9934; 5,827,633 matches.

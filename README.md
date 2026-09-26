@@ -51,7 +51,7 @@ uv run python -m amzn.crossenc score --split train --model-dir models/crossencod
 uv run python -m amzn.crossenc score --split test --model-dir models/crossencoder_b --pairs cache/ce/test_scores.parquet --output cache/ce_b/test_scores.parquet
 
 # 7. Pairwise blend (stage 1 + cross-encoder), per-country scorer choice, calibration, decoding.
-uv run python -m amzn.blend --model-dir output/v7 --extras name --extra-ce b=cache/ce_b --output-dir output/blend
+uv run python -m amzn.blend --model-dir output/v7 --extras name,full --extra-ce b=cache/ce_b --depth 6 --output-dir output/blend
 uv run python -m amzn.hybrid --blend-dir output/blend --output-dir output
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
