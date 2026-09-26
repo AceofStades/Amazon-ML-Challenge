@@ -64,10 +64,15 @@ def house_segments(frame: pl.DataFrame, cache_dir: Path, split: str) -> pl.DataF
     """Attach the house-number relation of each pair: equal (the Source 1 house number
     appears among the target's address numbers), conflict (both have numbers, no match)
     or unknown. Test decoys sit at nearby house numbers, so they concentrate in 'conflict'."""
-    from .train_v4 import house_numbers
-    s_house, _, t_numbers = house_numbers(cache_dir, split)
-    hs = pl.Series("hs", s_house[frame["si"].to_numpy()])
-    nums = t_numbers.gather(frame["ti"].to_numpy())
+    # Same values as train_v4.house_numbers, computed only for the pairs at hand (the full target
+    # tables of both splits do not fit in memory next to a desktop session and a training job).
+    read = lambda i, column: pl.read_csv(cache_dir / f"{split}_source{i}.tsv", separator="\t", quote_char=None,
+                                         infer_schema=False, columns=[column])[column].fill_null("")
+    hs = read(1, "house").gather(frame["si"].to_numpy()).alias("hs")
+    addresses = pl.concat([read(2, "address"), read(3, "address")])
+    nums = addresses.gather(frame["ti"].to_numpy()).str.extract_all(r"\d+").list.eval(
+        pl.element().str.strip_chars_start("0").replace("", "0")).alias("nums")
+    del addresses
     relation = pl.DataFrame({"hs": hs, "nums": nums}).select(
         pl.when((pl.col("hs") != "") & pl.col("nums").list.contains(pl.col("hs"))).then(pl.lit("equal"))
         .when((pl.col("hs") != "") & (pl.col("nums").list.len() > 0)).then(pl.lit("conflict"))
