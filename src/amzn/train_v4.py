@@ -352,7 +352,7 @@ def evaluate(args: argparse.Namespace) -> None:
 def write_test(args: argparse.Namespace) -> None:
     """Decode test scores with the best holdout configuration and write both TSVs."""
     from .infer_v3 import grouped_tsv
-    best = json.loads((args.stage2_dir / "evaluation.json").read_text())["best"]
+    best = args.decode_config or json.loads((args.stage2_dir / "evaluation.json").read_text())["best"]
     column, o2o, mode, th, mass = best.split("_")
     frame = pl.read_parquet(args.stage2_dir / "test_scored.parquet")
     candidates = frame.select("si", "ti")
@@ -405,6 +405,8 @@ def main() -> None:
     parser.add_argument("--calibrate-segments", action="store_true",
                         help="Calibrate separately for equal, conflicting and unknown house numbers")
     parser.add_argument("--calibration-bins", type=int, default=25)
+    parser.add_argument("--decode-config",
+                        help="Override the holdout-selected decode, e.g. p1_o2o_expected_0.05_0.0")
     parser.add_argument("--stage2-dir", type=Path,
                         help="Where stage-2 artifacts go (defaults to --model-dir)")
     parser.add_argument("--extra", action="append", default=[],
