@@ -7,7 +7,7 @@ Holdout: training Source 1 entities with hash bucket 50-59 (1%, about 22k entiti
 | 2026-09-26 | v2 stage2 | Key blocking + seed expansion + XGBoost (27 string features) | 0.9244 | 0.896978 |
 | 2026-09-26 | v2 stage2_deep | Deeper XGBoost | 0.9252 | not submitted |
 | 2026-09-26 | v3 base | Transliteration + region normalization, fine-tuned multilingual-e5-small kNN (k=40) unioned with key blocking, IDF and embedding context features, 4-fold stage 1 + stage 2 context model, expected-F0.5 decoding | 0.9813 | not submitted |
-| 2026-09-26 | v3 legal | + canonical legal-form agreement/conflict features (US, Indian and French forms) | 0.9832 | pending |
+| 2026-09-26 | v3 legal | + canonical legal-form agreement/conflict features (US, Indian and French forms) | 0.9832 | 0.960932 |
 
 ## Candidate recall (training sample, 458,727 positive pairs)
 
@@ -40,3 +40,15 @@ share their name with another Source 1 entity, so they are ambiguous. No row-ord
 Matches per entity: France 3.38 (5.3% empty), India 3.42 (5.7%), US 3.53 (5.7%).
 Claimed share of targets: France 0.611, India 0.586, US 0.614 (v2 France: 0.747).
 Validator PASS with ID checks: 1,732,544 rows, 97,787 empty; 108,147,874 candidate pairs.
+
+## Test distribution shift (v3 legal)
+
+Leaderboard 0.9609 against holdout 0.9832. Pairs per entity with p2 in [0.3, 0.98]:
+US holdout 0.29, US test 0.60; India holdout 0.26, India test 0.40; France test 0.58.
+The p2 > 0.98 bin is unchanged (US 3.17 holdout, 3.22 test), so the extra mass is look-alike records.
+
+Inspection of mid-confidence test pairs: decoy entities with the same or a perturbed name
+on the same street a few doors away ("Williams Templeton" 2212 vs "Williams Center" 2213,
+"Williams Tempoettron Corp" 2217). Each decoy brings several records that share its own house number,
+while a house-number typo on a true record stays alone. Test has about twice the decoy density of
+training, so stage 2 gets explicit house-cluster features instead of relying on the training prior.
