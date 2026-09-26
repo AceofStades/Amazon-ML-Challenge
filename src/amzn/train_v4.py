@@ -345,13 +345,21 @@ def write_test(args: argparse.Namespace) -> None:
     frame = pl.read_parquet(args.stage2_dir / "test_scored.parquet")
     candidates = frame.select("si", "ti")
     if args.calibrate:
-        from .calibrate import apply_per_bin, per_bin
+        from .calibrate import apply_per_bin, apply_per_segment, house_segments, per_bin, per_segment
         countries = {split: pl.read_parquet(args.embed_dir / f"{split}_source1_ids.parquet")
                      .select("country").with_row_index("si") for split in ("train", "test")}
         holdout = pl.read_parquet(args.stage2_dir / "valid_predictions.parquet").join(countries["train"], on="si")
         test = frame.join(countries["test"], on="si")
-        fits = per_bin(holdout, test, column, 0.02, 25)
-        frame = apply_per_bin(test, column, fits, 0.02).drop("country")
+        if args.calibrate_segments:
+            live = test.filter(pl.col(column) >= 0.001)
+            holdout = house_segments(holdout, args.cache_dir, "train")
+            live = house_segments(live, args.cache_dir, "test")
+            fits = per_segment(holdout, live, column, 0.02, args.calibration_bins)
+            live = apply_per_segment(live, column, fits, 0.02).drop("segment")
+            frame = pl.concat([live, test.filter(pl.col(column) < 0.001)], how="diagonal_relaxed").drop("country")
+        else:
+            fits = per_bin(holdout, test, column, 0.02, args.calibration_bins)
+            frame = apply_per_bin(test, column, fits, 0.02).drop("country")
         (args.output_dir / "calibration.json").write_text(json.dumps(fits, indent=1))
     if o2o == "o2o":
         frame = one_to_one(frame, column)
@@ -382,6 +390,9 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("output/v4"))
     parser.add_argument("--calibrate", action="store_true",
                         help="Apply the per-bin label-shift correction before decoding test")
+    parser.add_argument("--calibrate-segments", action="store_true",
+                        help="Calibrate separately for equal, conflicting and unknown house numbers")
+    parser.add_argument("--calibration-bins", type=int, default=25)
     parser.add_argument("--stage2-dir", type=Path,
                         help="Where stage-2 artifacts go (defaults to --model-dir)")
     parser.add_argument("--extra", action="append", default=[],

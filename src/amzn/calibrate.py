@@ -60,6 +60,62 @@ def fit(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: float, bi
     return result
 
 
+def house_segments(frame: pl.DataFrame, cache_dir: Path, split: str) -> pl.DataFrame:
+    """Attach the house-number relation of each pair: equal, conflict or unknown.
+    Test decoys sit at nearby house numbers, so they concentrate in 'conflict'."""
+    import glob
+    keys = frame.select("si", "ti")
+    parts = []
+    for path in sorted(glob.glob(str(cache_dir / "v3" / split / "part*.parquet"))):
+        part = pl.read_parquet(path, columns=["si", "ti", "house_match", "house_conflict"])
+        parts.append(part.join(keys, on=["si", "ti"], how="semi"))
+    relation = pl.concat(parts).select(
+        "si", "ti",
+        pl.when(pl.col("house_match") == 1).then(pl.lit("equal"))
+        .when(pl.col("house_conflict") == 1).then(pl.lit("conflict"))
+        .otherwise(pl.lit("unknown")).alias("segment"))
+    return frame.join(relation, on=["si", "ti"], how="left").with_columns(pl.col("segment").fill_null("unknown"))
+
+
+def per_segment(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: float, bins: int,
+                top_p: float = 0.99) -> dict:
+    """Per-bin correction within each (country, segment); positives per entity keep their
+    holdout density, scaled by the country factor a fitted on the top bins of all segments."""
+    edges = np.linspace(logit(np.array([min_p]))[0], logit(np.array([0.999]))[0], bins)
+    top = np.flatnonzero(np.r_[-np.inf, edges] >= logit(np.array([top_p]))[0])
+    result = {}
+    for country in sorted(test["country"].unique().to_list()):
+        h = holdout.filter(pl.col("country") == country)
+        if not h.height:
+            h = holdout
+        t = test.filter(pl.col("country") == country)
+        nh, nt = h["si"].n_unique(), t["si"].n_unique()
+        n1_all, _ = histograms(h[column].to_numpy(), h["label"].to_numpy().astype(float), edges, nh)
+        m_all = histograms(t[column].to_numpy(), None, edges, nt)
+        a = float(m_all[top].sum() / max(n1_all[top].sum(), 1e-9))
+        for segment in ("equal", "conflict", "unknown"):
+            hs = h.filter(pl.col("segment") == segment)
+            ts = t.filter(pl.col("segment") == segment)
+            n1, _ = histograms(hs[column].to_numpy(), hs["label"].to_numpy().astype(float), edges, nh)
+            m = histograms(ts[column].to_numpy(), None, edges, nt)
+            posterior = np.clip(a * n1 / np.maximum(m, 1e-9), 0, 1)
+            posterior[m < 1e-6] = np.nan
+            # Empty cells borrow from the neighbour below; then force monotone.
+            posterior = pl.Series(posterior).fill_nan(None).fill_null(strategy="forward").fill_null(0.0).to_numpy()
+            posterior[0] = min(posterior[0], posterior[1])
+            posterior = np.maximum.accumulate(posterior)
+            result[f"{country}|{segment}"] = {"a": a, "edges": edges.tolist(), "posterior": posterior.round(4).tolist()}
+            print(country, segment, f"a={a:.3f}", np.round(posterior[1:], 2).tolist(), flush=True)
+    return result
+
+
+def apply_per_segment(frame: pl.DataFrame, column: str, fits: dict, min_p: float) -> pl.DataFrame:
+    frame = frame.with_columns((pl.col("country") + "|" + pl.col("segment")).alias("cell"))
+    renamed = frame.drop("country").rename({"cell": "country"})
+    adjusted = apply_per_bin(renamed, column, fits, min_p)
+    return adjusted.rename({"country": "cell"}).drop("cell")
+
+
 def per_bin(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: float, bins: int,
             top_p: float = 0.99) -> dict:
     """Positives per entity keep their holdout density (scaled by a, fitted on the top
