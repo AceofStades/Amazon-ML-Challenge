@@ -33,12 +33,12 @@ def export_texts(data_root: Path, out: Path) -> None:
 
 
 def export_training_pairs(embed_dir: Path, truth_path: Path, out: Path, entities: int, depth: int,
-                          min_bucket: int) -> None:
+                          min_bucket: int, seed: int = 11, name: str = "ce_train_pairs.parquet") -> None:
     s_ids = pl.read_parquet(embed_dir / "train_source1_ids.parquet").select("entity_id").with_row_index("si")
     t_ids = pl.concat([pl.read_parquet(embed_dir / f"train_source{i}_ids.parquet").select("entity_id")
                        for i in (2, 3)]).with_row_index("ti")
     buckets = duckdb.sql("SELECT si, hash(entity_id) % 1000 AS bucket FROM s_ids").pl()
-    chosen = buckets.filter(pl.col("bucket") >= min_bucket).sample(n=entities, seed=11)["si"]
+    chosen = buckets.filter(pl.col("bucket") >= min_bucket).sample(n=entities, seed=seed)["si"]
     knn = (pl.scan_parquet(embed_dir / "train_knn.parquet")
            .filter((pl.col("rank") <= depth) & pl.col("q").is_in(chosen.implode()))
            .select(pl.col("q").cast(pl.Int64).alias("si"), pl.col("d").cast(pl.Int64).alias("ti")).collect())
@@ -50,8 +50,8 @@ def export_training_pairs(embed_dir: Path, truth_path: Path, out: Path, entities
     positives = truth.filter(pl.col("si").is_in(chosen.implode())).select("si", "ti")
     pairs = (pl.concat([knn, positives]).unique()
              .join(truth, on=["si", "ti"], how="left").with_columns(pl.col("label").fill_null(0))
-             .sample(fraction=1.0, shuffle=True, seed=12))
-    pairs.write_parquet(out / "ce_train_pairs.parquet", compression="zstd")
+             .sample(fraction=1.0, shuffle=True, seed=seed + 1))
+    pairs.write_parquet(out / name, compression="zstd")
     print(f"training pairs {pairs.height:,}, positive rate {pairs['label'].mean():.3f}", flush=True)
 
 
@@ -65,11 +65,14 @@ def main() -> None:
     parser.add_argument("--depth", type=int, default=8)
     parser.add_argument("--min-bucket", type=int, default=100)
     parser.add_argument("--skip-texts", action="store_true")
+    parser.add_argument("--seed", type=int, default=11)
+    parser.add_argument("--pairs-name", default="ce_train_pairs.parquet")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     if not args.skip_texts:
         export_texts(args.data_root, args.output)
-    export_training_pairs(args.embed_dir, args.truth, args.output, args.entities, args.depth, args.min_bucket)
+    export_training_pairs(args.embed_dir, args.truth, args.output, args.entities, args.depth, args.min_bucket,
+                          args.seed, args.pairs_name)
 
 
 if __name__ == "__main__":
