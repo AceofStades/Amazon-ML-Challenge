@@ -291,3 +291,10 @@ counts, neighbour-similarity profile, address similarity), so most training pair
 weighted stage-1 refit reached holdout logloss 0.061 by round 1000 (worse than the unweighted model) and then
 crashed twice with SIGSEGV inside XGBoost 3.4.1 CPU histogram building with sample weights. Shelved in favour of
 the France recall rule, which needs no retraining.
+
+## House conflicts: US versus France
+
+Accepted US pairs with conflicting house numbers are mostly dropped-digit typos on true records (601 vs 60,
+15911 vs 5911, 1203 vs 203). Accepted France conflicts are unrelated numbers (129 vs 445, 8 vs 165, 30 vs 289),
+the decoy signature; treating one dropped digit as a typo changes only 110 of 9,321 France drops. Candidate
+submission: calibrated France + recall rule + drop of non-typo France conflicts (5,836,456 matches).
