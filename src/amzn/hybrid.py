@@ -38,6 +38,8 @@ def main() -> None:
     parser.add_argument("--cache-dir", type=Path, default=Path("cache"))
     parser.add_argument("--embed-dir", type=Path, default=Path("cache/embeddings"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/hybrid"))
+    parser.add_argument("--fallback-dir", type=Path,
+                        help="Run whose stage-1 scores serve countries without labels (default: --blend-dir)")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -45,16 +47,20 @@ def main() -> None:
                  .select("country").with_row_index("si") for split in ("train", "test")}
     holdout = pl.read_parquet(args.blend_dir / "valid_predictions.parquet").join(countries["train"], on="si")
     test = pl.read_parquet(args.blend_dir / "test_scored.parquet").join(countries["test"], on="si")
+    fallback_dir = args.fallback_dir or args.blend_dir
+    fallback_holdout = pl.read_parquet(fallback_dir / "valid_predictions.parquet").join(countries["train"], on="si")
+    fallback_test = pl.read_parquet(fallback_dir / "test_scored.parquet").join(countries["test"], on="si")
     labelled = set(holdout["country"].unique().to_list())
     print("countries with labels:", sorted(labelled), flush=True)
 
     known = test.filter(pl.col("country").is_in(list(labelled)))
-    unknown = test.filter(~pl.col("country").is_in(list(labelled)))
+    unknown = fallback_test.filter(~pl.col("country").is_in(list(labelled)))
     parts = []
     if known.height:
         parts.append(calibrated(holdout, known, "p2", args.cache_dir).select("si", "ti", pl.col("p2").alias("p")))
     if unknown.height:
-        parts.append(calibrated(holdout, unknown, "p1", args.cache_dir).select("si", "ti", pl.col("p1").alias("p")))
+        parts.append(calibrated(fallback_holdout, unknown, "p1", args.cache_dir)
+                     .select("si", "ti", pl.col("p1").alias("p")))
     scored = one_to_one(pl.concat(parts), "p")
     chosen = decode(scored["si"].to_numpy(), scored["ti"].to_numpy(), scored["p"].to_numpy(), "expected", 0.05, 0.0)
 
