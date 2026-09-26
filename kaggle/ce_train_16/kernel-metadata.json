@@ -1,5 +1,5 @@
 {
-  "id": "techno0/amzn-ce-train-16",
+  "id": "adityadavjekar/amzn-ce-train-16",
   "title": "amzn-ce-train-16",
   "code_file": "ce_train.py",
   "language": "python",
@@ -9,7 +9,7 @@
   "enable_internet": "true",
   "dataset_sources": [
     "aceofstades/amzn-er-data",
-    "techno0/amzn-er-hard"
+    "adityadavjekar/amzn-er-hard"
   ],
   "competition_sources": [],
   "kernel_sources": []

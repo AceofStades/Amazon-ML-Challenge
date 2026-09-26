@@ -1,5 +1,5 @@
 {
-  "id": "techno0/amzn-ce-score-16",
+  "id": "adityadavjekar/amzn-ce-score-16",
   "title": "amzn-ce-score-16",
   "code_file": "ce_score.py",
   "language": "python",
@@ -12,6 +12,6 @@
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "techno0/amzn-ce-train-16"
+    "adityadavjekar/amzn-ce-train-16"
   ]
 }
