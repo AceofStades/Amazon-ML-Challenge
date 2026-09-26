@@ -318,3 +318,37 @@ submission: calibrated France + recall rule + drop of non-typo France conflicts 
 - The model has no feature for the kind of word change, so gen_features.py adds them: exact/add/drop/typo/swap
   (in place or moved), the swapped-in word's class (filler, common, rare), log document frequencies of missing and
   extra words per country, acronym/domain/alias with initials consistency, and single-brand names.
+
+## Generator-aware features, France swap and initials rules
+
+- gen_features.py adds name-change descriptors to the blend (--extras gen). Holdout F0.5 (same decode, in
+  candidates) 0.99169 against 0.99160 for blend_v7_fullL: the patterns are rare in training.
+- A no-CE blend with gen features as the France scorer was rejected: the France segment calibration maps its
+  0.96 scores for exact same-address names to about 0.6, dropping about 4k true pairs, plus 4.4k true
+  "drop a type word, add a suffix" pairs ("Mes Sportive SARL" vs "Mes SARL Et Fils").
+- France rule --drop-swaps: drop accepted France pairs whose name replaces one word by another common word
+  (20+ France Source 1 names, not a filler such as services/france, not a typo or abbreviation of it).
+  Evidence: in training, decoy swaps land on the Source 1 house 0.42 times as often as on another house of the
+  same street; France has 22,445 same-house and 40,987 other-house common-word swaps, so only about 23% of the
+  same-house ones are true (club 18%, ecole 21%, comite 28%). Drops 9.3k pairs.
+- France rule --add-initials: add every scored candidate whose name is an acronym or web domain spelling the
+  Source 1 initials or words, on the Source 1 street without a house conflict, target not yet assigned
+  (99.9% true in training; France has 12 times more of them and stage 1 scores them at a median 0.35).
+  Adds 6.6k pairs (5.8k acronyms).
+- Holdout check of the same drops on US/India: the CE blend already accepts only true last-digit house changes
+  (precision 1.000) and true swaps (0.991), so no rule is applied there. Stage-1 holdout decisions keep
+  common-word swaps at 0.88 precision, above the F0.5 break-even of about 0.77, but France swaps are not
+  comparable (vocabulary shared with France decoys).
+- House-number differences in training, same street and same name with a conflict: last digit only,
+  difference 1-2: 42.5% true; 3-10: 13.5% true; inner digit or dropped digit: 82-99% true (typos).
+- Submission files: 6 = best + France patterns - conflicts - swaps + initials (5,833,759 matches);
+  5 = without initials; 5b = without conflict drops.
+
+## More cross-encoders
+
+Six Kaggle GPU sessions (three accounts, two each) plus hades:
+aceofstades L2 (e5-large, seed 21) and XLM-R large on hard pairs (seed 61); rekishu e5-large (seed 31) and
+e5-large on hard pairs (seed 41); hrishitachavan bge-reranker-v2-m3 (Apache-2.0) on kNN pairs and on hard pairs
+(seed 51); hades e5-base (kNN pairs, done) and e5-base on hard pairs (seed 71). Hard pairs are the stage-1
+candidates with p1 >= 0.01 of 600k entities outside the blend buckets, plus two kNN neighbours and all true
+matches (2.83M pairs, 73% positive): the region where the blend uses cross-encoder scores.
