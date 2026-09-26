@@ -273,3 +273,13 @@ Keep the calibrated France decisions and add back a raw-only pair only at the So
 when the target name is an acronym of the Source 1 initials, a web domain carrying a Source 1 word or initials,
 a DBA/f.k.a. alias, a near-typo (compact Jaro-Winkler >= 0.92) or the Source 1 core name plus extra words.
 Adds 18,399 pairs (acronym 6,653; domain 2,986; typo/containment 8,726; alias 34), which read as nearly all true.
+
+## France audits (no labels)
+
+Accepted France pairs per entity by house relation: equal 2.89, conflict 0.044, unknown 0.27 (US: 2.70 / 0.33 / 0.36).
+Accepted different-name France pairs are overwhelmingly generator noise on true records (domains, DBA prefixes,
+acronyms, typos). Same-name clusters are split correctly across same-name Source 1 entities by address, and
+same-name records at other numbers stay unassigned. The optional --drop-conflicts rule would remove 9,321
+accepted France pairs with conflicting house numbers; a sample mixes decoys with true records whose number was
+randomized, so it is not part of the default output. Candidate recall for exact name+address pairs is 100% in
+every country.
