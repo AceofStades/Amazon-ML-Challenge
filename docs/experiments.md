@@ -415,3 +415,20 @@ Fitting the France posterior curves without one-word common swaps and single mad
 curve (for example 0.29-0.64 becomes 0.48-0.86 in the upper-middle bins) and adds 3.9k France pairs. Only the 2.4k in
 classes that are true noise in training (drop plus suffix, filler swap, exact, domain, typo, acronym) are kept
 (scripts/merge_france.py); brands and multi-word swaps among the additions look like decoys.
+
+## Holdout error audit and composition rescoring
+
+Best blend (auto2) on the 22k holdout: 1,836 false negatives and 109 false positives. 78% of the false negatives
+are targets without an address whose name is shared by several Source 1 entities (up to 283), which is ambiguous.
+No leakage: row order and ids are random (median gap between matches of one entity is 1.09M rows).
+
+Generator structure: records of an entity are spread over both sources (an entity with three records has none in
+Source 2 only 5.9% of the time, none for six or more), 13% of entities have one record without an address and 1%
+have two; at most one alias per entity (8.0% vs 0.00%), acronym (0.7% vs 0.01%), and rarely two brands or domains.
+scripts/compose.py rescores ambiguous pairs (0.01 <= p < 0.99) with features from the entity's confident matches
+(source counts, no-address count, kind counts, fit of the extra record under the training composition, competing
+claims on the target). Cross-validated over 220k entities: logloss on ambiguous pairs 0.2254 -> 0.2186, macro F0.5
+0.99130 -> 0.99150. Applied to US/India only: on France it removes true suffix/filler pairs.
+
+Blend-scored France (with segment-clean calibration) drops 24.5k true "drop plus French suffix" pairs: the
+cross-encoders do not know the French suffixes, stage 1 does through normalization.
