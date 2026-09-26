@@ -43,6 +43,28 @@ def kind(name: str | None) -> str:
     return "other"
 
 
+STOP = {"de", "du", "des", "la", "le", "les", "l", "d", "et", "and", "the", "of", "&"}
+
+
+def initials(name: str, stop: bool) -> str:
+    words = re.findall(r"[a-z0-9]+", (name or "").lower())
+    return "".join(w[0] for w in words if not (stop and w in STOP))
+
+
+def consistent(kind_: str, target: str, source: str, core: str) -> bool:
+    """An acronym must spell the Source 1 initials; a domain must carry a Source 1 word or its initials.
+    Decoy businesses at the same address have their own names, so their acronyms and domains differ."""
+    t = re.sub(r"[^a-z0-9]", "", (target or "").lower())
+    if kind_ == "alias":
+        return True
+    if kind_ == "acronym":
+        return any(t and (init.startswith(t) or t.startswith(init[:2])) and init[:1] == t[:1]
+                   for init in (initials(source, True), initials(source, False)))
+    words = [w for w in (core or "").split() if len(w) >= 4]
+    return any(w in t for w in words) or any(len(i) >= 2 and t.startswith(i)
+                                             for i in (initials(source, True), initials(source, False)))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--calibrated", required=True, help="matching_results.tsv with calibrated decisions")
@@ -76,9 +98,14 @@ def main() -> None:
         pl.struct("s_core", "t_core").map_elements(
             lambda r: bool(set((r["s_core"] or "").split()) and set((r["s_core"] or "").split())
                            <= set((r["t_core"] or "").split())), return_dtype=pl.Boolean).alias("contains"))
+    s_names = s1.select(pl.col("entity_id").alias("source1_entity_id"), pl.col("business_name").alias("s_name"))
+    gap = gap.join(s_names, on="source1_entity_id", how="left").with_columns(
+        pl.struct("kind", "t_name", "s_name", "s_core").map_elements(
+            lambda r: consistent(r["kind"], r["t_name"], r["s_name"], r["s_core"]), return_dtype=pl.Boolean)
+        .alias("consistent"))
     keep = gap.filter(pl.col("same_address") & (
-        pl.col("kind").is_in(["acronym", "domain", "alias"])
-        | (pl.col("name_compact_jw") >= args.typo_jw) | pl.col("contains")))
+        (pl.col("kind").is_in(["acronym", "domain", "alias"]) & pl.col("consistent"))
+        | ((pl.col("kind") == "other") & ((pl.col("name_compact_jw") >= args.typo_jw) | pl.col("contains")))))
     taken = calibrated.select("matched_entity_ids").unique()
     keep = keep.join(taken, on="matched_entity_ids", how="anti").unique("matched_entity_ids", keep="first")
     print(f"{args.country} raw-only pairs {gap.height:,}; added back {keep.height:,}", flush=True)
