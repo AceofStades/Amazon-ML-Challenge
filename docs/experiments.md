@@ -395,3 +395,23 @@ use the whole week with nothing left for scoring, so every second run was delete
 budget (kernels 21-27; rekishu and tiya train boundary specialists on stage-1 pairs with 0.02 <= p1 < 0.98).
 Per account: first run about 15.6, deleted run about 1.5, two scorings about 3.4, second run about 8.1 GPU-hours.
 The user account keeps only the XLM-R scoring (about 10 GPU-hours were left).
+
+## Cross-validated blend comparison (10 folds over 220k entities)
+
+The 22k-entity holdout cannot separate blends that differ by 0.0002, so scripts/blend_cv.py fits each blend on
+nine groups of ten buckets and predicts the tenth, over all training entities in buckets 0-99.
+
+| Blend | CV F0.5 | Mean fold logloss |
+|---|---|---|
+| fullL (file 6) | 0.99115 | 0.04465 |
+| genLB (file 7) | 0.99121 | 0.04418 |
+| auto2 = genLB + hard-pair e5-base + second large e5 | 0.99130 | 0.04383 |
+
+auto2 is at least as good as genLB in 9 of 10 folds.
+
+## France calibration without decoy-heavy classes (segment-clean)
+
+Fitting the France posterior curves without one-word common swaps and single made-up brands raises the equal-house
+curve (for example 0.29-0.64 becomes 0.48-0.86 in the upper-middle bins) and adds 3.9k France pairs. Only the 2.4k in
+classes that are true noise in training (drop plus suffix, filler swap, exact, domain, typo, acronym) are kept
+(scripts/merge_france.py); brands and multi-word swaps among the additions look like decoys.
