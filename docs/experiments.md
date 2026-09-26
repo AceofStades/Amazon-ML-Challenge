@@ -529,3 +529,15 @@ Fourteen CPU fixture tests cover scoring, crash/resume, corrupted chunks,
 identity drift, invalid logits and deferred-launch guards. Shell syntax and
 Python compilation pass. Real GPU recovery remains unverified until the
 boundary chain releases the GPU. No existing training or running shell changes.
+
+## Exact decoder holdout result: rejected (2026-09-27)
+
+On 22,144 held-out entities with global stage-1 target ownership and full
+ground-truth denominators, the existing decoder scores 0.984830851671 and the
+exact independent-Bernoulli decoder scores 0.984272355674: a decrease of
+0.000558495997. Existing decisions have 73,930 true positives and 327 false
+positives; exact decisions have 73,902 true positives and 342 false positives.
+The mathematical calculation is correct under its assumptions, but those
+assumptions do not improve these model decisions. Retain the existing decoder
+for submissions. The optional exact mode remains available for reproducible
+experiments; it is not enabled in any submission pipeline.
