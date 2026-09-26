@@ -1,0 +1,13 @@
+{
+  "id": "rekishu/amzn-ce-score-5",
+  "title": "amzn-ce-score-5",
+  "code_file": "ce_score.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "false",
+  "dataset_sources": ["aceofstades/amzn-er-data"],
+  "competition_sources": [],
+  "kernel_sources": ["rekishu/amzn-ce-train-5"]
+}

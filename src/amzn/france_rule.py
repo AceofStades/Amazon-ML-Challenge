@@ -144,6 +144,29 @@ def drop_swaps(base: pl.DataFrame, s1: pl.DataFrame, targets: pl.DataFrame, coun
                      on=["source1_entity_id", "matched_entity_ids"], how="anti")
 
 
+def initials_pairs(s1: pl.DataFrame, targets: pl.DataFrame, country: str, taken: pl.DataFrame) -> pl.DataFrame:
+    """Every scored candidate pair of the country whose target is an acronym or web domain that spells the
+    Source 1 initials or words, on the Source 1 street without a house conflict, for targets not yet assigned.
+    Training pairs of this kind at the same address are 99.9% true; stage 1 scores the short French
+    acronyms low (median p1 0.35) because such names recur across many targets."""
+    gen = pl.read_parquet("cache/gen/test.parquet", columns=["si", "ti", "g_acronym", "g_domain", "g_consistent"])
+    local = s1.filter(pl.col("country") == country).select("si")
+    cand = gen.join(local, on="si", how="semi").filter(
+        ((pl.col("g_acronym") == 1) | (pl.col("g_domain") == 1)) & (pl.col("g_consistent") == 1))
+    feats = pl.concat([pl.read_parquet(path, columns=["si", "ti", "house_conflict", "address_idf_cos"])
+                       .join(cand.select("si", "ti"), on=["si", "ti"], how="semi")
+                       for path in sorted(glob.glob("cache/v3/test/part*.parquet"))])
+    cand = (cand.join(feats, on=["si", "ti"])
+            .filter((pl.col("house_conflict") != 1) & (pl.col("address_idf_cos") >= 0.6))
+            .join(targets.select("ti", pl.col("entity_id").alias("matched_entity_ids")), on="ti")
+            .join(taken, on="matched_entity_ids", how="anti")
+            .sort("address_idf_cos", descending=True).unique("ti", keep="first")
+            .join(s1.select("si", pl.col("entity_id").alias("source1_entity_id")), on="si"))
+    print(f"{country}: adding {cand.height:,} acronym/domain pairs on the Source 1 street "
+          f"({int(cand['g_acronym'].sum()):,} acronyms)", flush=True)
+    return cand.select("source1_entity_id", "matched_entity_ids")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--calibrated", required=True, help="matching_results.tsv with calibrated decisions")
@@ -155,6 +178,8 @@ def main() -> None:
                         help="Drop accepted pairs whose house numbers conflict (not typo-close)")
     parser.add_argument("--drop-swaps", action="store_true",
                         help="Drop accepted pairs whose name swaps one word for another common word")
+    parser.add_argument("--add-initials", action="store_true",
+                        help="Add acronym/domain pairs on the Source 1 street from all scored candidates")
     args = parser.parse_args()
 
     s1 = read("dataset/test/test_source1.tsv").with_row_index("si")
@@ -200,6 +225,9 @@ def main() -> None:
     if args.drop_swaps:
         base = drop_swaps(base, s1, targets, args.country)
     merged = pl.concat([base, keep.select("source1_entity_id", "matched_entity_ids")])
+    if args.add_initials:
+        taken = merged.select("matched_entity_ids").unique()
+        merged = pl.concat([merged, initials_pairs(s1, targets, args.country, taken)])
     lists = merged.group_by("source1_entity_id").agg(
         pl.col("matched_entity_ids").unique().sort().str.join(","))
     out = s1.select(pl.col("entity_id").alias("source1_entity_id")).join(

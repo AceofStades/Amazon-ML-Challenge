@@ -75,7 +75,7 @@ def training_pairs(args: argparse.Namespace) -> pl.DataFrame:
 
 def train(args: argparse.Namespace) -> None:
     torch.manual_seed(args.seed)
-    pairs = training_pairs(args)
+    pairs = (pl.read_parquet(args.pairs_file).select(pl.col("si").cast(pl.Int64), pl.col("ti").cast(pl.Int64), pl.col("label").cast(pl.Float32)) if args.pairs_file else training_pairs(args))
     source1, targets = record_texts(Path(args.data_dir), "train")
     tokenizer = AutoTokenizer.from_pretrained(args.base_model)
     model = CrossEncoder(args.base_model).cuda()
@@ -164,6 +164,7 @@ def main() -> None:
     p.add_argument("--lr", type=float, default=4e-5)
     p.add_argument("--min-bucket", type=int, default=100)
     p.add_argument("--seed", type=int, default=1)
+    p.add_argument("--pairs-file", help="Training pairs parquet (si, ti, label) instead of the kNN sample")
     p.add_argument("--base-model", default=BASE_MODEL,
                    help="MIT/Apache encoder to fine-tune, e.g. intfloat/multilingual-e5-base")
     p = sub.add_parser("score")

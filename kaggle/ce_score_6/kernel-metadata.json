@@ -1,0 +1,13 @@
+{
+  "id": "hrishitachavan/amzn-ce-score-6",
+  "title": "amzn-ce-score-6",
+  "code_file": "ce_score.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "false",
+  "dataset_sources": ["aceofstades/amzn-er-data"],
+  "competition_sources": [],
+  "kernel_sources": ["hrishitachavan/amzn-ce-train-6"]
+}
