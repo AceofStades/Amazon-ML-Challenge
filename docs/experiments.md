@@ -64,3 +64,15 @@ posteriors: raw 0.6 -> 0.22, raw 0.9 -> 0.54, raw 0.97 -> 0.76, raw >= 0.99 -> 1
 |---|---|---|---|---|---|
 | v3 legal | 5,985,926 | 3.53 | 3.42 | 3.38 | 0.960932 |
 | v3 legal + per-bin correction | 5,624,024 | 3.23 | 3.34 | 2.99 | 0.968379 (rank ~403) |
+
+## Cross-encoder (e5-small, 3.2M hard pairs from buckets >= 100)
+
+Holdout pairs with stage-1 p >= 0.01 (101,103 pairs, 75% positive):
+
+| Scorer | Logloss | AUC | Accuracy |
+|---|---|---|---|
+| v4 stage 1 | 0.0729 | 0.9943 | 0.9738 |
+| cross-encoder | 0.0752 | 0.9949 | 0.9710 |
+| average of both | 0.0625 | 0.9964 | 0.9806 |
+
+Target-pair same-entity model: 15.2M labelled target pairs from buckets >= 100 (69% same entity).
