@@ -541,3 +541,23 @@ The mathematical calculation is correct under its assumptions, but those
 assumptions do not improve these model decisions. Retain the existing decoder
 for submissions. The optional exact mode remains available for reproducible
 experiments; it is not enabled in any submission pipeline.
+
+## Addressed France rejection audit (2026-09-27)
+
+`scripts/france_audit_rejected.py` joins the current France decisions with
+stage-1 scores, address features and generator-aware name classes. It records
+unassigned candidates without changing a submission. Run with
+`flock logs/blend.lock env POLARS_MAX_THREADS=2 OMP_NUM_THREADS=2 PYTHONPATH=src .venv/bin/python scripts/france_audit_rejected.py`.
+The baseline is `output/sub_auto2_frsafe/matching_results.tsv`; the detailed
+artifact is `output/france_audit_rejected.parquet` and the run log is
+`logs/france_audit_rejected.log`.
+
+There are 701,331 unassigned candidate pairs passing the address filter. Of
+these, 543,720 have p1 below 0.01 and no cached generator classification.
+Among classified candidates, 45,150 are brands, 43,323 common-word swaps,
+24,230 exact core names, 19,572 multiple-word changes, and 4,635 dropped-word
+names. Exact names have median p1 0.1434 and only 85 exact-address pairs;
+nearby-number decoys make indiscriminate restoration unsafe. Review instead
+found false house conflicts caused by number prefixes, address token order,
+street-type artifacts, postal codes and apartment numbers. These narrow
+parser hypotheses are evaluated separately. Python compilation passes.
