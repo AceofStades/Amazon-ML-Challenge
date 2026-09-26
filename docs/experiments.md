@@ -244,3 +244,14 @@ France 107, India 788, US 582). Fixed: one winner per target, ties broken by raw
 France predictions per entity by calibration mode: segment 3.20, uniform 3.22, none (raw stage 1) 3.39. Pairs added
 by 'none' are mostly acronyms, domains, typos and generic-word swaps at the same address (estimated 70-80% true).
 Submissions: hybrid_L_frnone (5,875,982 matches), hybrid_L_frsegment (5,827,268).
+
+## Calibration refined by name agreement (rejected)
+
+Splitting each house-relation segment by name agreement (IDF cosine >= 0.95) leaves sparse cells: bins with few test
+pairs get posterior 1.0 after clipping and the monotone pass, e.g. US conflicting-house different-name pairs reach
+1.0 from mid scores, the opposite of the decoy pattern. Kept the house-relation segments.
+
+## Additional cross-encoders in flight
+
+Second large cross-encoder (seed-21 entities) on Kaggle; e5-base cross-encoder (MIT, 278M, seed-4 entities) on the
+local GPU at 368 pairs/s.
