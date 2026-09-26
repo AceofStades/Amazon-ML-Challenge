@@ -213,3 +213,9 @@ at the exact address ("Solgildlum", "Zetagildveo", "Yumalum") and (b) nearby hou
 separates matches (none: 1.3% true; all: 71% true), but the blend is already calibrated per slice (mean score equals
 the match rate), and the reverse-neighbour rank splits the fully gibberish group into 94% vs 20% true. No further
 holdout gain found from these signals. Depth-8 blend: logloss 0.0468, F0.5 0.9903 (depth 6 kept).
+
+## Large cross-encoder (Kaggle, 2x T4)
+
+intfloat/multilingual-e5-large (MIT, 560M) with frozen word embeddings, DDP fp16, 3.0M hard pairs from buckets >= 100:
+6.0 h at 138 pairs/s. Validation on 30k held-out training pairs: logloss 0.0373, accuracy 0.9852. Scoring the 3.8M
+pairs with stage-1 p in [0.01, 0.995) on Kaggle.
