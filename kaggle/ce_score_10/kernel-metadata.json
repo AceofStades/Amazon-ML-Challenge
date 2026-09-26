@@ -1,5 +1,5 @@
 {
-  "id": "cyclop5/amzn-ce-score-10",
+  "id": "cycl0p5/amzn-ce-score-10",
   "title": "amzn-ce-score-10",
   "code_file": "ce_score.py",
   "language": "python",
@@ -12,6 +12,6 @@
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "cyclop5/amzn-ce-train-10"
+    "cycl0p5/amzn-ce-train-10"
   ]
 }
