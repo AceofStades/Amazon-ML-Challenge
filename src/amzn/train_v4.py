@@ -293,6 +293,16 @@ def evaluate(args: argparse.Namespace) -> None:
     best = max(results, key=results.get)
     (args.stage2_dir / "evaluation.json").write_text(json.dumps({"best": best, "all": results}, indent=1))
     print("best", best, results[best])
+    # Labelled holdout pairs for test-time label-shift calibration.
+    valid = frame.filter(is_valid(frame))
+    positives = pl.DataFrame(
+        [(s, t) for s, ts in truth.items() for t in ts], schema=["source1_entity_id", "candidate_entity_id"],
+        orient="row")
+    positives = (positives.join(s_ids.rename({"entity_id": "source1_entity_id"}), on="source1_entity_id")
+                 .join(t_ids.rename({"entity_id": "candidate_entity_id"}), on="candidate_entity_id")
+                 .select("si", "ti", pl.lit(1, pl.Int8).alias("label")))
+    valid = valid.join(positives, on=["si", "ti"], how="left").with_columns(pl.col("label").fill_null(0))
+    valid.write_parquet(args.stage2_dir / "valid_predictions.parquet")
 
 
 def write_test(args: argparse.Namespace) -> None:
@@ -302,6 +312,15 @@ def write_test(args: argparse.Namespace) -> None:
     column, o2o, mode, th, mass = best.split("_")
     frame = pl.read_parquet(args.stage2_dir / "test_scored.parquet")
     candidates = frame.select("si", "ti")
+    if args.calibrate:
+        from .calibrate import apply_per_bin, per_bin
+        countries = {split: pl.read_parquet(args.embed_dir / f"{split}_source1_ids.parquet")
+                     .select("country").with_row_index("si") for split in ("train", "test")}
+        holdout = pl.read_parquet(args.stage2_dir / "valid_predictions.parquet").join(countries["train"], on="si")
+        test = frame.join(countries["test"], on="si")
+        fits = per_bin(holdout, test, column, 0.02, 25)
+        frame = apply_per_bin(test, column, fits, 0.02).drop("country")
+        (args.output_dir / "calibration.json").write_text(json.dumps(fits, indent=1))
     if o2o == "o2o":
         frame = one_to_one(frame, column)
     chosen = decode(frame["si"].to_numpy(), frame["ti"].to_numpy(), frame[column].to_numpy(),
@@ -329,6 +348,8 @@ def main() -> None:
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--model-dir", type=Path, default=Path("output/v4"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/v4"))
+    parser.add_argument("--calibrate", action="store_true",
+                        help="Apply the per-bin label-shift correction before decoding test")
     parser.add_argument("--stage2-dir", type=Path,
                         help="Where stage-2 artifacts go (defaults to --model-dir)")
     parser.add_argument("--extra", action="append", default=[],
@@ -342,6 +363,7 @@ def main() -> None:
     args.model_dir.mkdir(parents=True, exist_ok=True)
     args.stage2_dir = args.stage2_dir or args.model_dir
     args.stage2_dir.mkdir(parents=True, exist_ok=True)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
     for step in args.steps:
         started = time.time()
         {"stage1": lambda: train_stage1(args),
