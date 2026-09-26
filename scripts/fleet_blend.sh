@@ -19,7 +19,13 @@ $PY -m amzn.blend --model-dir output/v7 --extras name,full,gen $EXTRA --depth 6 
 PYTHONPATH=src $PY scripts/eval_holdout.py output/blend_v7_genLB output/blend_$NAME
 $PY -m amzn.hybrid --blend-dir output/blend_$NAME --output-dir output/hybrid_$NAME
 mkdir -p output/sub_$NAME
-$PY -m amzn.france_rule --calibrated output/hybrid_$NAME/matching_results.tsv --raw output/hybrid_L_frnone/matching_results.tsv \
+# Raw (uncalibrated) decisions for countries without labels: the pool the France rule restores patterns from.
+RAW=output/hybrid_L_frnone/matching_results.tsv
+if [ ! -f "$RAW" ]; then
+    $PY -m amzn.hybrid --blend-dir output/blend_$NAME --fallback-calibration none --output-dir output/hybrid_${NAME}_raw
+    RAW=output/hybrid_${NAME}_raw/matching_results.tsv
+fi
+$PY -m amzn.france_rule --calibrated output/hybrid_$NAME/matching_results.tsv --raw $RAW \
     --drop-conflicts --drop-swaps --add-initials --output output/sub_$NAME/matching_results.tsv
 ln -f output/hybrid_$NAME/candidate_pairs.tsv output/sub_$NAME/candidate_pairs.tsv
 $PY src/utils_validate_submission.py -m output/sub_$NAME/matching_results.tsv -c output/sub_$NAME/candidate_pairs.tsv | tail -1

@@ -1,8 +1,11 @@
 # Business entity resolution pipeline
 
 Links every Source 1 test record to zero or more Source 2/Source 3 records using only the supplied challenge TSVs.
-No external identity data, geocoder or lookup service is used. Pretrained weights: `intfloat/multilingual-e5-small`
-(MIT) for the bi-encoder and cross-encoder; XGBoost (Apache-2.0) for the matchers.
+No external identity data, geocoder or lookup service is used. Pretrained weights (all MIT or Apache-2.0, at most
+568M parameters): `intfloat/multilingual-e5-small` for the bi-encoder and small cross-encoders;
+`intfloat/multilingual-e5-base`, `intfloat/multilingual-e5-large`, `intfloat/multilingual-e5-large-instruct`,
+`BAAI/bge-reranker-v2-m3`, `BAAI/bge-m3` and `FacebookAI/xlm-roberta-large` for the other cross-encoders; XGBoost
+(Apache-2.0) for the matchers.
 
 Requirements: Python 3.12 with uv, an NVIDIA GPU (16 GB is enough), about 32 GB RAM and 150 GB of disk.
 Place the TSVs under `dataset/train/` and `dataset/test/` with their original names and run everything from this
@@ -53,15 +56,23 @@ uv run python -m amzn.crossenc score --split test --model-dir models/crossencode
 # Third small cross-encoder (seed 3); same pairs.
 ./scripts/run_ce_c.sh
 
-# Large cross-encoder (multilingual-e5-large, MIT) on Kaggle GPUs: export texts and pairs, train, score the pairs
-# with stage-1 p in [0.01, 0.995), then place the scores at cache/ce_large/{train,test}_scores.parquet.
+# Large cross-encoders on Kaggle 2x T4 notebooks: export texts and pair lists, train, score the pairs with
+# stage-1 p in [0.01, 0.995), then place the scores at cache/<name>/{train,test}_scores.parquet.
 uv run python -m amzn.kaggle_export
-# kaggle/ce_train (train), kaggle/ce_score (score); pair lists come from cache/ce/*_pairs with p1 < 0.995.
+# Hard training pairs (stage-1 candidates with p1 >= 0.01, two neighbours, all true links), one file per seed.
+uv run python -m amzn.kaggle_export --skip-texts --hard-from output/v7 --seed 41 --pairs-name ce_train_pairs_hard_seed41.parquet
+# kaggle/ce_train_N trains one model (e5-large, e5-large-instruct, bge-reranker-v2-m3, bge-m3 or xlm-roberta-large)
+# and kaggle/ce_score_N scores it; scripts/fleet_blend.sh lists the score directories it looks for.
+# Local extra cross-encoders: multilingual-e5-base on neighbour pairs and on hard pairs.
+./scripts/run_ce_base.sh
+./scripts/run_ce_base_hard.sh
 
-# 7. Pairwise blend (stage 1 + cross-encoders), per-country scorer choice, calibration, decoding.
-uv run python -m amzn.blend --model-dir output/v7 --extras name,full --extra-ce b=cache/ce_b \
-    --extra-ce c=cache/ce_c --extra-ce L=cache/ce_large --depth 6 --output-dir output/blend
-uv run python -m amzn.hybrid --blend-dir output/blend --output-dir output
+# 7. Generator-aware name features, pairwise blend of stage 1 and every cross-encoder, per-country scorer choice,
+#    calibration and decoding, then the generator-pattern rules for countries without labels (France).
+uv run python -m amzn.gen_features --split train
+uv run python -m amzn.gen_features --split test
+./scripts/fleet_blend.sh final   # output/blend_final, output/hybrid_final, output/sub_final/*.tsv
+cp output/sub_final/matching_results.tsv output/sub_final/candidate_pairs.tsv output/
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
     --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids
@@ -97,6 +108,10 @@ README explains the file names and the `si`/`ti` row conventions.
   ("Lille Ecole SARL" exists many times), falls in this group automatically.
 - **Decoding**: each target goes to at most one Source 1 entity, then the candidate prefix with the highest expected
   F0.5 is chosen (an empty list included).
+- **Generator-aware rules for countries without labels** (`amzn.france_rule`, `amzn.gen_features`): restore
+  acronyms, web domains, aliases and near-typos at the Source 1 address; drop house-number conflicts that are not
+  typos and one-word swaps to another common vocabulary word (true only about 23% of the time in France). Each rule
+  rests on a training-label statistic and is applied only where the model has no labels.
 - **Label shift**: the test set holds about twice as many look-alike decoy records per entity as the training data,
   concentrated at nearby house numbers. Per country, house relation (equal, conflict, unknown) and score bin, holdout
   positives per entity are kept and extra test pairs count as negatives; the corrected posterior replaces the raw
