@@ -8,20 +8,24 @@
 
 ## 1. Executive Summary
 
-The pipeline links each Source 1 record to the Source 2/3 records of the same business in four steps:
+The pipeline links each Source 1 record to the Source 2/3 records of the same business in five steps:
 
-1. Normalization, including a learned dictionary that maps native-script Indian tokens to Latin spellings.
+1. Normalization, including a learned native-script-to-Latin dictionary and country-aware address rules.
 2. Candidate generation, as the union of rare-key blocking and nearest neighbours from a fine-tuned multilingual
-   bi-encoder.
-3. A two-stage XGBoost matcher.
-4. Set-level decoding that maximizes expected F0.5 per Source 1 entity, with at most one Source 1 entity per
+   bi-encoder (pair recall 0.997).
+3. A pairwise XGBoost matcher over 67 string, IDF, legal-form, house-number and embedding features.
+4. A fine-tuned multilingual cross-encoder, blended with the matcher for countries that have training labels.
+5. Set-level decoding that maximizes expected F0.5 per Source 1 entity, with at most one Source 1 entity per
    target record.
 
-The test data contains about twice as many look-alike decoy records per entity as the training data. A label-free
-prior-shift correction recalibrates the test probabilities before decoding.
+The test data differs from the training data in two ways, and both are handled without test labels:
 
-Holdout macro F0.5 (22,144 training entities, singletons included) rose from 0.924 to 0.983. The public leaderboard
-score rose from 0.897 to 0.968.
+- It holds about twice as many look-alike decoy records per entity. A per-segment prior-shift correction
+  recalibrates the test probabilities.
+- It includes an unlabelled country (France) whose business names are generic. For any country absent from the
+  labels, the pipeline falls back to the pairwise matcher, which carries explicit name-genericness evidence.
+
+Holdout macro F0.5 (22,144 training entities, singletons included) rose from 0.924 to 0.990.
 
 ## 2. Data and Preparation
 
