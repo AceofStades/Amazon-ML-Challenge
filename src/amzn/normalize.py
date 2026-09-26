@@ -23,7 +23,28 @@ LEGAL_WORDS = {
     # French legal forms and articles.
     "sarl", "sas", "sasu", "sa", "eurl", "sci", "snc", "et", "de", "la", "le",
     "les", "du", "des", "d", "l",
+    # Suffixes the generator adds to French names, like "Services" or "& Sons" in English.
+    "cie", "compagnie", "fils", "freres", "frs", "associes", "groupe", "developpement",
+    "pc", "pllc", "lp",
 }
+
+
+def merge_initials(tokens: list[str]) -> list[str]:
+    """Join runs of single letters: 's a r l' -> 'sarl', 'l l c' -> 'llc' (dotted legal forms)."""
+    result: list[str] = []
+    run: list[str] = []
+    for token in tokens + [""]:
+        if len(token) == 1 and token.isalpha():
+            run.append(token)
+            continue
+        if len(run) >= 2:
+            result.append("".join(run))
+        else:
+            result.extend(run)
+        run = []
+        if token:
+            result.append(token)
+    return result
 ADDRESS_WORDS = {
     "avenue", "ave", "boulevard", "blvd", "building", "bldg", "city",
     "colony", "district", "drive", "dr", "floor", "fl", "highway", "hwy",
@@ -137,7 +158,7 @@ def normalize_record(row: dict[str, str]) -> tuple[str, ...]:
     """Return normalized fields in RECORD_COLUMNS order."""
     country_tokens = words(row.get("country"))
     country = " ".join(country_tokens)
-    name_tokens = words(row.get("business_name"))
+    name_tokens = merge_initials(words(row.get("business_name")))
     replacements = FRENCH_REPLACEMENTS if country == "france" else ADDRESS_REPLACEMENTS
     address_tokens = [replacements.get(token, token) for token in words(row.get("business_address"))]
     address_tokens = replace_regions(address_tokens, country)
