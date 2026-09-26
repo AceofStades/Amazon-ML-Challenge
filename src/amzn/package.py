@@ -36,7 +36,7 @@ def build_package(root: Path, team_name: str, submission_dir: Path, stage1_dir: 
             bundle.write(submission_dir / name, f"output/{name}")
         for name in ("README.md", "requirements.txt", "pyproject.toml", "uv.lock", ".python-version"):
             bundle.write(root / name, f"{code_root}/{name}")
-        for folder, pattern in (("src", "*.py"), ("scripts", "*.sh"), ("kaggle", "*.py"), ("kaggle", "*.json"),
+        for folder, pattern in (("src", "*.py"), ("scripts", "*.sh"), ("scripts", "*.py"), ("kaggle", "*.py"), ("kaggle", "*.json"),
                                 ("docs", "*.md")):
             for path in sorted((root / folder).rglob(pattern)):
                 if "data" in path.relative_to(root / folder).parts:
