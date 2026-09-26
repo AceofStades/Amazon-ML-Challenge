@@ -34,3 +34,9 @@ US 0.9814, India 0.9812. Loss: partial recall 0.0092, entity fully missed 0.0037
 singleton false merge 0.0014. Half of the false-negative pairs have no target address, and 84% of those
 share their name with another Source 1 entity, so they are ambiguous. No row-order or ID leakage exists
 (correlation of file positions of matched records is 0.001).
+
+## v3 legal test profile
+
+Matches per entity: France 3.38 (5.3% empty), India 3.42 (5.7%), US 3.53 (5.7%).
+Claimed share of targets: France 0.611, India 0.586, US 0.614 (v2 France: 0.747).
+Validator PASS with ID checks: 1,732,544 rows, 97,787 empty; 108,147,874 candidate pairs.
