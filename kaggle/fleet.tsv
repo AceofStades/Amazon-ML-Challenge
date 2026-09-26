@@ -1,0 +1,16 @@
+# config_dir (relative to $HOME, or default = ~/.kaggle)	training kernel	scoring kernel dir (kaggle/)	cache name (cache/ce_NAME)	model and training pairs
+default	aceofstades/amzn-ce-train-7	ce_score_7	xlmr7	XLM-R large, hard pairs seed 61
+.kaggle/rid	rekishu/amzn-ce-train-3	ce_score_3	large3	e5-large, kNN pairs seed 31
+.config/kaggle/tiya	hrishitachavan/amzn-ce-train-4	ce_score_4	bge	bge-reranker-v2-m3, kNN pairs seed 0
+.config/kaggle/sid	siddharthbokade/amzn-ce-train-9	ce_score_9	bgem3	bge-m3, hard pairs seed 91
+.config/kaggle/vj	cycl0p5/amzn-ce-train-10	ce_score_10	large10	e5-large, hard pairs seed 101 (version 2)
+.config/kaggle/umed	umedindulkar/amzn-ce-train-12	ce_score_12	xlmr12	XLM-R large, hard pairs seed 121
+.config/kaggle/ansh	ayj2411/amzn-ce-train-14	ce_score_14	labse14	LaBSE, hard pairs seed 151
+.config/kaggle/dave	adityadavjekar/amzn-ce-train-16	ce_score_16	large16	e5-large, hard pairs seed 171
+.kaggle/rid	rekishu/amzn-ce-train-21	ce_score_21	bnd21	e5-large, boundary pairs (0.02 <= p1 < 0.98)
+.config/kaggle/tiya	hrishitachavan/amzn-ce-train-22	ce_score_22	bndbge22	bge-reranker-v2-m3, boundary pairs
+.config/kaggle/sid	siddharthbokade/amzn-ce-train-23	ce_score_23	e5i23	e5-large-instruct, hard pairs seed 81
+.config/kaggle/umed	umedindulkar/amzn-ce-train-24	ce_score_24	e5i24	e5-large-instruct, hard pairs seed 131
+.config/kaggle/vj	cycl0p5/amzn-ce-train-25	ce_score_25	bge25	bge-reranker-v2-m3, hard pairs seed 111
+.config/kaggle/ansh	ayj2411/amzn-ce-train-26	ce_score_26	bgem3_26	bge-m3, hard pairs seed 161
+.config/kaggle/dave	adityadavjekar/amzn-ce-train-27	ce_score_27	bge27	bge-reranker-v2-m3, hard pairs seed 181

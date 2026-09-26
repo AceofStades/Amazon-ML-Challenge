@@ -1,5 +1,7 @@
 # Business entity resolution pipeline
 
+> Picking up this work? Read [HANDOFF.md](HANDOFF.md) first: goal, running jobs, Kaggle fleet, plan and open leads.
+
 Links every Source 1 test record to zero or more Source 2/Source 3 records using only the supplied challenge TSVs.
 No external identity data, geocoder or lookup service is used. Pretrained weights (all MIT or Apache-2.0, at most
 568M parameters): `intfloat/multilingual-e5-small` for the bi-encoder and small cross-encoders;
