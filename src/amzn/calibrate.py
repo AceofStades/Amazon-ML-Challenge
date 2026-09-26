@@ -61,20 +61,18 @@ def fit(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: float, bi
 
 
 def house_segments(frame: pl.DataFrame, cache_dir: Path, split: str) -> pl.DataFrame:
-    """Attach the house-number relation of each pair: equal, conflict or unknown.
-    Test decoys sit at nearby house numbers, so they concentrate in 'conflict'."""
-    import glob
-    keys = frame.select("si", "ti")
-    parts = []
-    for path in sorted(glob.glob(str(cache_dir / "v3" / split / "part*.parquet"))):
-        part = pl.read_parquet(path, columns=["si", "ti", "house_match", "house_conflict"])
-        parts.append(part.join(keys, on=["si", "ti"], how="semi"))
-    relation = pl.concat(parts).select(
-        "si", "ti",
-        pl.when(pl.col("house_match") == 1).then(pl.lit("equal"))
-        .when(pl.col("house_conflict") == 1).then(pl.lit("conflict"))
+    """Attach the house-number relation of each pair: equal (the Source 1 house number
+    appears among the target's address numbers), conflict (both have numbers, no match)
+    or unknown. Test decoys sit at nearby house numbers, so they concentrate in 'conflict'."""
+    from .train_v4 import house_numbers
+    s_house, _, t_numbers = house_numbers(cache_dir, split)
+    hs = pl.Series("hs", s_house[frame["si"].to_numpy()])
+    nums = t_numbers.gather(frame["ti"].to_numpy())
+    relation = pl.DataFrame({"hs": hs, "nums": nums}).select(
+        pl.when((pl.col("hs") != "") & pl.col("nums").list.contains(pl.col("hs"))).then(pl.lit("equal"))
+        .when((pl.col("hs") != "") & (pl.col("nums").list.len() > 0)).then(pl.lit("conflict"))
         .otherwise(pl.lit("unknown")).alias("segment"))
-    return frame.join(relation, on=["si", "ti"], how="left").with_columns(pl.col("segment").fill_null("unknown"))
+    return frame.with_columns(relation["segment"])
 
 
 def per_segment(holdout: pl.DataFrame, test: pl.DataFrame, column: str, min_p: float, bins: int,
