@@ -45,9 +45,13 @@ uv run python -m amzn.crossenc select --split train --model-dir output/v7 --outp
 uv run python -m amzn.crossenc select --split test --model-dir output/v7 --output cache/ce/test_pairs.parquet
 uv run python -m amzn.crossenc score --split train --pairs cache/ce/train_pairs.parquet --output cache/ce/train_scores.parquet
 uv run python -m amzn.crossenc score --split test --pairs cache/ce/test_pairs.parquet --output cache/ce/test_scores.parquet
+# Second cross-encoder on other entities (seed 2, 600k entities), scored on the same pairs.
+uv run python -m amzn.crossenc train --seed 2 --entities 600000 --model-dir models/crossencoder_b
+uv run python -m amzn.crossenc score --split train --model-dir models/crossencoder_b --pairs cache/ce/train_scores.parquet --output cache/ce_b/train_scores.parquet
+uv run python -m amzn.crossenc score --split test --model-dir models/crossencoder_b --pairs cache/ce/test_scores.parquet --output cache/ce_b/test_scores.parquet
 
 # 7. Pairwise blend (stage 1 + cross-encoder), per-country scorer choice, calibration, decoding.
-uv run python -m amzn.blend --model-dir output/v7 --extras name --output-dir output/blend
+uv run python -m amzn.blend --model-dir output/v7 --extras name --extra-ce b=cache/ce_b --output-dir output/blend
 uv run python -m amzn.hybrid --blend-dir output/blend --output-dir output
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \

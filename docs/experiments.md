@@ -185,3 +185,9 @@ France stage-1 projection rose from 0.9737 (v6) to 0.9802. Hybrid v7: projected 
 
 Holdout loss breakdown for the v6 blend (F0.5 0.9900 including the recall ceiling): partial recall 0.0067
 (1,971 entities), a false merge 0.0014, all links missed 0.0013, singleton false merge 0.0006.
+
+## Second cross-encoder (seed 2, 600k entities, 4.8M pairs)
+
+Holdout logloss on rescored pairs: first 0.0759, second 0.0729, logit mean 0.0724. Blend with both (plus name
+inputs): logloss 0.0476 (single 0.0489), holdout F0.5 0.99028 (single 0.99007); projected US 0.9943,
+India 0.9960 (single: 0.9945, 0.9961), i.e. a tie on test. Submission hybrid_v7ab: 5,812,412 matches.
