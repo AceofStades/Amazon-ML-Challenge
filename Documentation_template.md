@@ -8,36 +8,117 @@
 
 ## 1. Executive Summary
 
-Our solution uses two bounded candidate-generation passes and two GPU-trained XGBoost pair classifiers. The second pass uses high-confidence links from the first classifier as anchors for finding additional Source 2/3 variants. A final classifier scores the exact union recorded in candidate_pairs.tsv. The deterministic holdout macro F0.5 is 0.924402 on 22,144 Source 1 entities. The pipeline uses only the supplied TSV data.
+The pipeline links each Source 1 record to the Source 2/3 records of the same business in four steps:
+
+1. Normalization, including a learned dictionary that maps native-script Indian tokens to Latin spellings.
+2. Candidate generation, as the union of rare-key blocking and nearest neighbours from a fine-tuned multilingual
+   bi-encoder.
+3. A two-stage XGBoost matcher.
+4. Set-level decoding that maximizes expected F0.5 per Source 1 entity, with at most one Source 1 entity per
+   target record.
+
+The test data contains about twice as many look-alike decoy records per entity as the training data. A label-free
+prior-shift correction recalibrates the test probabilities before decoding.
+
+Holdout macro F0.5 (22,144 training entities, singletons included) rose from 0.924 to 0.983. The public leaderboard
+score rose from 0.897 to 0.968.
 
 ## 2. Data and Preparation
 
-The training set has 2,206,821 Source 1 records and 10,320,219 Source 2/3 records. The test set has 1,732,544 Source 1 records and 9,969,589 Source 2/3 records. Exhaustive comparison is infeasible. Training records show transliteration, character substitutions, inserted or deleted words, legal-suffix changes, reordered addresses, extra house numbers, and missing fields.
+The training set has 2,206,821 Source 1 records and 10,320,219 Source 2/3 records (7,638,365 labelled links; every
+target belongs to at most one Source 1 entity; 26% of targets belong to no Source 1 entity). The test set has
+1,732,544 Source 1 and 9,969,589 Source 2/3 records, including France, which has no training labels.
 
-Preparation streams the files with explicit tab delimiters. It lowercases and transliterates text, removes punctuation, expands common address abbreviations, and derives canonical sorted name/address strings, numeric house fields, and discriminative name/address token anchors. Country is normalized as an open string label and used in blocking keys. There is no US/India-only model branch or filter; test entities from France remain eligible.
+Noise seen in the data: native-script names (Devanagari, Bengali, Tamil, Telugu, Kannada, Gujarati, Gurmukhi, Odia,
+Malayalam; 9% of test targets), native-script state names, typos and character swaps, inserted or removed words,
+legal-suffix changes, reordered tokens, trade names, missing addresses, house-number typos and leading zeros,
+abbreviated street types and state or department names.
+
+Normalization (`normalize.py`, `translit.py`):
+
+- **Transliteration dictionary.** Learned from matched training pairs. Name tokens are aligned by position when the
+  token counts agree; address tokens are aligned by co-occurrence (Dice score). The dictionary has 1,363 entries
+  and covers 97.4% of native-script test tokens. Unknown tokens fall back to Unicode transliteration.
+- **Address rules per country.** US and India street abbreviations; French abbreviations (R., AV., BD, ALL, IMP,
+  RTE, ST. = Saint, and others).
+- **Regions.** Each US state, Indian state and French region/department collapses to one canonical token, so
+  "Texas" equals "TX" and "Gironde" equals "Nouvelle-Aquitaine".
+- **Derived fields.** Sorted canonical name/address strings, the house number, and anchor tokens.
+- **Country** is an open string label. The pipeline has no US/India-only branch.
 
 ## 3. Candidate Generation
 
-The first blocker indexes targets by exact canonical name/address, pairs of name anchors, name/address token combinations, house/name and house/address combinations, rare single tokens, and prefix-based keys resilient to some misspellings. Keys with large target posting lists are suppressed, with caps ranging from 40 to 1,000 depending on specificity. DuckDB joins the keys and ranks pairs by raw name/address Jaro-Winkler similarity, house agreement, strongest key, and number of matching keys. It keeps at most 30 targets per Source 1 record.
+Two independent generators are unioned; the union is exactly `candidate_pairs.tsv`.
 
-The first classifier scores those pairs. Links with predicted probability at least 0.9 become expansion seeds. On the disjoint validation split, these seeds had 99.35% link precision. Each seed's rare indexed keys (target frequency at most 40) retrieve other target records. The second blocker ranks them using similarity to both the seed and original Source 1 record, excludes first-pass pairs, and keeps at most 30 additional candidates per Source 1 record. The final candidate set is the union of both passes; every pair in it is scored by the final classifier and every predicted match appears in it.
+**Key blocking** (`blocking.py`): exact canonical name or address, name-token pairs, name/address and house/address
+token combinations, and prefix keys. Keys with long posting lists are dropped. The 30 best targets per Source 1
+record are kept, ranked by Jaro-Winkler similarity and key evidence.
 
-On a deterministic 6% training sample, the first 30-candidate pass retrieves 409,740 of 458,727 known links (0.893211 pair recall). Expansion retrieves 14,392 additional links, raising candidate recall to 0.924587. The combined set has 7,053,012 pairs across 132,455 Source 1 records, averaging 53.25 candidates per Source 1 record. This cuts roughly ten million possible comparisons per Source 1 entity to a few dozen.
+**Bi-encoder retrieval** (`embed.py`): `intfloat/multilingual-e5-small` (MIT, 118M parameters) fine-tuned with a
+symmetric in-batch contrastive loss on 1.5M matched pairs. It uses training entities in hash buckets >= 100 only,
+so the matcher's training and holdout entities are unseen. Batches group records with the same name prefix or city
+to create hard negatives. All records are encoded and an exact cosine top-40 search runs per country on GPU. A
+reverse search (each target against Source 1, top 5) supplies competition features.
+
+Pair recall on 458,727 training links: keys 0.934, encoder top 40 0.997, union 0.997, at about 63 candidates per
+Source 1 record (108M test pairs instead of 17 trillion possible pairs).
 
 ## 4. Matching Model and Features
 
-Both classifiers use XGBoost 3.4.1 (Apache-2.0 license), with GPU histogram training, depth 8, learning rate 0.07, subsampling, and validation-based early stopping. They use 27 numeric pair features: raw and canonical Jaro-Winkler, character-bigram Jaccard, token Jaccard, normalized edit similarity, name/address exact match, anchor overlap and anchor similarity, house match/conflict, address-number overlap, field length ratios, missingness, target source, and blocking rank/evidence.
+**Pair features (about 60):**
 
-The deterministic DuckDB hash split places roughly 5% of training Source 1 entities in model fitting and a disjoint roughly 1% in validation. It does not split individual candidate pairs from one Source 1 entity across fit and validation. Ground-truth matches include both Source 2 and Source 3 IDs; negatives come from the hard candidates produced by blocking. Threshold and candidate cap are tuned for macro F0.5, counting empty-truth singleton entities exactly as the challenge specifies. The first pass uses a 0.9 seed threshold for high precision. The final model selected a 0.65 decision threshold and up to 60 combined candidates.
+- String similarities: raw and canonical Jaro-Winkler, bigram and token Jaccard, edit similarity.
+- IDF-weighted token overlap (IDF computed over all records of a split): cosine, coverage, and the rarest shared
+  and missing token.
+- Legal-form agreement and conflict (Inc, LLC, Pvt, Ltd, SARL, SAS and others).
+- House numbers: exact match, conflict, edit distance, prefix/suffix relation, and address-number overlap.
+- Missing fields and name ambiguity (how many Source 1 or target records share the name).
+- Embedding features: cosine, rank, gap to the best candidate, the best Source 1 match of the target, and the rank
+  of this Source 1 record among them.
+- Sibling agreement: similarity to the other candidates of the same Source 1 record.
+
+**Stage 1:** GPU XGBoost trained on training entities in buckets 0-99 except the holdout (buckets 50-59), with four
+folds. Every training pair gets an out-of-fold score; the test gets the fold average.
+
+**Stage 2** adds context from the stage-1 scores:
+
+- Within the entity: rank, margin, count and sum of confident candidates, and sibling support weighted by score.
+- Across entities: the strongest competing Source 1 claim on the same target.
+- House-number clusters. Decoy businesses sit a few doors away on the same street and bring several records that
+  share their own house number. A typo on a true record leaves its house number alone among the candidates.
+
+Both stages use XGBoost 3.4.1 (Apache-2.0) with early stopping on the holdout.
+
+**Decoding:** each target record is kept only for its best-scoring Source 1 entity. For each entity, the candidate
+prefix (ranked by probability) that maximizes expected F0.5 is predicted, or an empty list when that scores higher.
 
 ## 5. Validation and Error Analysis
 
-The final model achieves macro F0.5 of 0.924402 on 22,144 held-out Source 1 entities. The corresponding first-pass model achieved 0.919435 with at most 30 candidates. At combined candidate caps 40, 50, and 60, final-model validation macro F0.5 is 0.924000, 0.924264, and 0.924402. The small extra gain from cap 60 is retained because leaderboard F0.5 is the primary scored criterion; the candidate count remains small relative to exhaustive search.
+Holdout: 22,144 training Source 1 entities (hash buckets 50-59), macro F0.5 with singletons, never used for training
+the encoder or the matchers. `docs/experiments.md` lists every result.
 
-Full-test inference scores 91,746,601 candidate pairs (52.96 per Source 1 record) and predicts 5,561,348 links. Both final TSVs passed the supplied validator with full test-ID checks. Each has exactly 1,732,544 Source 1 rows. The matching file has 124,537 empty lists; the candidate file has 340 empty lists. Every predicted match is present in its candidate list.
+| Version | Holdout F0.5 | Leaderboard |
+|---|---|---|
+| Key blocking + XGBoost (27 features) | 0.924 | 0.897 |
+| + normalization, encoder kNN, IDF/legal/embedding features, stage 2 | 0.983 | 0.961 |
+| + test prior-shift correction | 0.983 | 0.968 |
 
-Remaining false negatives occur when severe transliteration or abbreviated data removes both direct blocking keys and seed-neighbor keys, or when a recovered candidate's Source 1 similarity is too weak for the final model. Repeated business names and incomplete addresses can produce false positives. The 0.9 seed threshold favors precision so errors do not cascade through the expansion pass. France is unseen in the training labels and may cause validation-to-leaderboard shift.
+**Distribution shift.** The confident pairs per entity (p >= 0.99) are the same on holdout and test. Pairs scored
+0.3-0.98 are 2-3 times more frequent on test. Inspection shows decoy entities that are absent from Source 1: the
+same or a perturbed name on the same street a few doors away (for example "Williams Templeton" at 2212 Leeward Shore
+Dr with decoys at 2213 and 2217). `calibrate.py` keeps the holdout positives per entity in each score bin, fitted on
+the top bins per country, and counts the excess test pairs as negatives. The corrected posterior replaces the raw
+score (a raw 0.9 becomes about 0.5 for US).
+
+**Remaining errors.** Half of the missed links are targets without an address whose name is shared by several
+Source 1 entities, which is ambiguous even to a human. False links are mostly decoy neighbours at nearby house
+numbers.
 
 ## 6. Reproduction and Fair Play
 
-The README gives exact uv/Python 3.12 commands from the original TSVs through normalization, both training passes, full-test inference, validation, and packaging. The archive contains code, pinned requirements, uv lockfile, both trained model artifacts, both required output TSVs, and this document. Raw challenge data is excluded from the archive and Git. No external business-identity database, API, geocoder, or augmentation service is used.
+`README.md` lists every command from the raw TSVs to the validated outputs. The archive contains all source code,
+pinned dependencies (`pyproject.toml`, `uv.lock`, `requirements.txt`), the transliteration dictionary, the fine-tuned
+encoder and the XGBoost models, both output TSVs and this document. Raw challenge data is not included.
+
+Only the supplied TSVs are used. No external business database, API, geocoder or data augmentation. The pretrained
+weights are general multilingual text encoders under the MIT license (118M parameters, far below 8B).
