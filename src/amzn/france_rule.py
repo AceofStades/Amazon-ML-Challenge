@@ -70,7 +70,12 @@ def typo_close(a: str, b: str) -> bool:
     a, b = a.lstrip("0") or "0", b.lstrip("0") or "0"
     if a == b:
         return True
-    return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1 and len(a) >= 2
+    if len(a) == len(b):
+        return len(a) >= 2 and sum(x != y for x, y in zip(a, b)) == 1
+    short, long_ = sorted((a, b), key=len)
+    # One digit dropped (a frequent noise on true records): 601 vs 60, 15911 vs 5911.
+    return len(long_) - len(short) == 1 and len(short) >= 2 and any(
+        long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
 
 
 def drop_house_conflicts(base: pl.DataFrame, s1: pl.DataFrame, targets: pl.DataFrame, country: str) -> pl.DataFrame:
