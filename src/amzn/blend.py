@@ -18,6 +18,7 @@ import numpy as np
 import polars as pl
 import xgboost as xgb
 
+from .gen_features import FEATURES as GEN
 from .v3 import id_frames
 
 BASE = ["logit_p1", "ce_logit"]
@@ -70,6 +71,9 @@ def load(model_dir: Path, ce_dir: Path, split: str, extras: set[str], cache_dir:
         parts = [pl.read_parquet(path, columns=["si", "ti", *NAME]).join(live, on=["si", "ti"], how="semi")
                  for path in sorted(glob.glob(str(cache_dir / "v3" / split / "part*.parquet")))]
         frame = frame.join(pl.concat(parts), on=["si", "ti"], how="left")
+    if "gen" in extras:
+        gen = pl.read_parquet(cache_dir / "gen" / f"{split}.parquet")
+        frame = frame.join(gen, on=["si", "ti"], how="left")
     if "tt" in extras:
         tt = pl.read_parquet(cache_dir / "tt" / f"{split}_aggregates.parquet").with_columns(
             pl.col("si").cast(pl.UInt32), pl.col("ti").cast(pl.UInt32))
@@ -107,7 +111,9 @@ def main() -> None:
     parser.add_argument("--embed-dir", type=Path, default=Path("cache/embeddings"))
     parser.add_argument("--truth", type=Path, default=Path("dataset/train/train_ground_truth.tsv"))
     parser.add_argument("--output-dir", type=Path, default=Path("output/v4_blend"))
-    parser.add_argument("--extras", default="", help="comma list: house, tt, name, full")
+    parser.add_argument("--extras", default="", help="comma list: house, tt, name, full, gen")
+    parser.add_argument("--no-ce", action="store_true",
+                        help="Leave cross-encoder logits out of the features (scorer for countries without labels)")
     parser.add_argument("--depth", type=int, default=3)
     parser.add_argument("--test-chunks", type=int, default=8)
     parser.add_argument("--second-model-dir", type=Path, help="Another stage-1 run to blend in")
@@ -117,7 +123,8 @@ def main() -> None:
     extras = {e for e in args.extras.split(",") if e}
     global FEATURES
     FEATURES = (BASE + (HOUSE if "house" in extras else []) + (TT if "tt" in extras else [])
-                + (NAME if "name" in extras else []) + (["logit_p1b"] if args.second_model_dir else []))
+                + (NAME if "name" in extras else []) + (GEN if "gen" in extras else [])
+                + (["logit_p1b"] if args.second_model_dir else []))
     extra_ce = tuple((item.split("=", 1)[0], Path(item.split("=", 1)[1])) for item in args.extra_ce)
     FEATURES += [f"{name}_logit" for name, _ in extra_ce]
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -128,6 +135,9 @@ def main() -> None:
     train = load(args.model_dir, args.ce_dir, "train", extras, second=args.second_model_dir, extra_ce=extra_ce,
                  keep=keep)
     FEATURES += [n for n in FULL if n not in FEATURES]
+    if args.no_ce:
+        FEATURES = [n for n in FEATURES if n != "ce_logit" and n not in {f"{name}_logit" for name, _ in extra_ce}]
+    print(f"{len(FEATURES)} features", flush=True)
     train = train.join(buckets.with_columns(pl.col("si").cast(pl.UInt32)), on="si").filter(pl.col("bucket") < 100)
     train = labels(train, args.embed_dir, args.truth)
     valid_mask = (pl.col("bucket") >= 50) & (pl.col("bucket") < 60)
