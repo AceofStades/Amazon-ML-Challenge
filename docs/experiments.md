@@ -204,3 +204,12 @@ subset). Holdout logloss 0.0466 (two-cross-encoder depth-3 blend: 0.0476); holdo
 
 A cross-encoder veto for France (min of stage 1 and blend) projects 0.9756, worse than stage 1 alone.
 Hybrid v7full: projected 0.9934; 5,827,633 matches.
+
+## Remaining holdout misses (full blend)
+
+1,919 missed positive pairs, 1,489 of them targets without an address. The rest are mostly (a) generated trade names
+at the exact address ("Solgildlum", "Zetagildveo", "Yumalum") and (b) nearby house numbers on true records (3688 vs
+3690). Among different-name same-address pairs, the share of target name tokens that never occur in Source 1 names
+separates matches (none: 1.3% true; all: 71% true), but the blend is already calibrated per slice (mean score equals
+the match rate), and the reverse-neighbour rank splits the fully gibberish group into 94% vs 20% true. No further
+holdout gain found from these signals. Depth-8 blend: logloss 0.0468, F0.5 0.9903 (depth 6 kept).
