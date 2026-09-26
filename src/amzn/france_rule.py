@@ -65,6 +65,36 @@ def consistent(kind_: str, target: str, source: str, core: str) -> bool:
                                              for i in (initials(source, True), initials(source, False)))
 
 
+def typo_close(a: str, b: str) -> bool:
+    """House numbers that differ like a typo: same digits after zero padding, or equal length with one digit changed."""
+    a, b = a.lstrip("0") or "0", b.lstrip("0") or "0"
+    if a == b:
+        return True
+    return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1 and len(a) >= 2
+
+
+def drop_house_conflicts(base: pl.DataFrame, s1: pl.DataFrame, targets: pl.DataFrame, country: str) -> pl.DataFrame:
+    """For the unlabelled country, drop accepted pairs whose house numbers conflict unless typo-close:
+    its decoys repeat the business name at another number on the same street."""
+    def standalone(frame: pl.DataFrame) -> pl.Series:
+        # Digits glued to letters ('cite1', 'espl1', 'chem1') are street-type artifacts, not house numbers.
+        return frame["address"].fill_null("").str.extract_all(r"(?:^|[^a-z0-9])(\d+)").list.eval(
+            pl.element().str.replace_all(r"[^0-9]", "").str.strip_chars_start("0").replace("", "0"))
+    s_norm = read("cache/test_source1.tsv").select("house")
+    t_norm = pl.concat([read(f"cache/test_source{i}.tsv").select("address") for i in (2, 3)])
+    t_numbers = standalone(t_norm)
+    rows = (base.join(s1.select("entity_id", "si", "country"), left_on="source1_entity_id", right_on="entity_id")
+            .join(targets.select("entity_id", "ti"), left_on="matched_entity_ids", right_on="entity_id"))
+    focus = rows.filter(pl.col("country") == country)
+    hs = s_norm["house"].fill_null("").to_numpy()[focus["si"].to_numpy()]
+    nums = t_numbers.gather(focus["ti"].to_numpy()).to_list()
+    conflict = [bool(h) and bool(n) and not any(typo_close(h, x) for x in n) for h, n in zip(hs, nums)]
+    dropped = focus.filter(pl.Series(conflict))
+    print(f"{country}: dropping {dropped.height:,} accepted pairs with conflicting house numbers", flush=True)
+    return base.join(dropped.select("source1_entity_id", "matched_entity_ids"),
+                     on=["source1_entity_id", "matched_entity_ids"], how="anti")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--calibrated", required=True, help="matching_results.tsv with calibrated decisions")
@@ -72,6 +102,8 @@ def main() -> None:
     parser.add_argument("--country", default="France")
     parser.add_argument("--output", required=True)
     parser.add_argument("--typo-jw", type=float, default=0.92)
+    parser.add_argument("--drop-conflicts", action="store_true",
+                        help="Drop accepted pairs whose house numbers conflict (not typo-close)")
     args = parser.parse_args()
 
     s1 = read("dataset/test/test_source1.tsv").with_row_index("si")
@@ -111,8 +143,10 @@ def main() -> None:
     print(f"{args.country} raw-only pairs {gap.height:,}; added back {keep.height:,}", flush=True)
     print(keep.group_by("kind").len().sort("len", descending=True).rows(), flush=True)
 
-    merged = pl.concat([calibrated.select("source1_entity_id", "matched_entity_ids"),
-                        keep.select("source1_entity_id", "matched_entity_ids")])
+    base = calibrated.select("source1_entity_id", "matched_entity_ids")
+    if args.drop_conflicts:
+        base = drop_house_conflicts(base, s1, targets, args.country)
+    merged = pl.concat([base, keep.select("source1_entity_id", "matched_entity_ids")])
     lists = merged.group_by("source1_entity_id").agg(
         pl.col("matched_entity_ids").unique().sort().str.join(","))
     out = s1.select(pl.col("entity_id").alias("source1_entity_id")).join(
