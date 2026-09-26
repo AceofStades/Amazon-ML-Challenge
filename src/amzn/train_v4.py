@@ -356,11 +356,17 @@ def score_stage2(args: argparse.Namespace, split: str) -> pl.DataFrame:
     return frame
 
 
-def one_to_one(frame: pl.DataFrame, column: str) -> pl.DataFrame:
-    best = frame.group_by("ti").agg(pl.col(column).max().alias("best"))
-    return frame.join(best, on="ti").with_columns(
-        pl.when(pl.col(column) < pl.col("best")).then(0.0).otherwise(pl.col(column)).alias(column)
-    ).drop("best")
+def one_to_one(frame: pl.DataFrame, column: str, tie_break: str | None = None) -> pl.DataFrame:
+    """Keep each target only for its single best Source 1 entity; every other pair of that
+    target gets score 0. Calibration maps many high scores to exactly 1.0, so ties are broken
+    by `tie_break` (the raw score) and then by the lower Source 1 row, never kept together."""
+    keys = [column] + ([tie_break] if tie_break and tie_break in frame.columns else []) + ["si"]
+    descending = [True] * (len(keys) - 1) + [False]
+    winners = (frame.select("si", "ti", *keys[:-1]).sort(keys, descending=descending)
+               .unique(subset="ti", keep="first").select("si", "ti", pl.lit(True).alias("winner")))
+    return frame.join(winners, on=["si", "ti"], how="left").with_columns(
+        pl.when(pl.col("winner").fill_null(False)).then(pl.col(column)).otherwise(0.0).alias(column)
+    ).drop("winner")
 
 
 def evaluate(args: argparse.Namespace) -> None:

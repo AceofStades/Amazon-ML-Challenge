@@ -57,11 +57,14 @@ def main() -> None:
     unknown = fallback_test.filter(~pl.col("country").is_in(list(labelled)))
     parts = []
     if known.height:
-        parts.append(calibrated(holdout, known, "p2", args.cache_dir).select("si", "ti", pl.col("p2").alias("p")))
+        raw = known.select("si", "ti", pl.col("p2").alias("raw"))
+        parts.append(calibrated(holdout, known, "p2", args.cache_dir).select("si", "ti", pl.col("p2").alias("p"))
+                     .join(raw, on=["si", "ti"]))
     if unknown.height:
+        raw = unknown.select("si", "ti", pl.col("p1").alias("raw"))
         parts.append(calibrated(fallback_holdout, unknown, "p1", args.cache_dir)
-                     .select("si", "ti", pl.col("p1").alias("p")))
-    scored = one_to_one(pl.concat(parts), "p")
+                     .select("si", "ti", pl.col("p1").alias("p")).join(raw, on=["si", "ti"]))
+    scored = one_to_one(pl.concat(parts), "p", tie_break="raw")
     chosen = decode(scored["si"].to_numpy(), scored["ti"].to_numpy(), scored["p"].to_numpy(), "expected", 0.05, 0.0)
 
     s_ids, t_ids = id_frames(args.embed_dir, "test")
