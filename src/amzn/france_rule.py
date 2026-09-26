@@ -14,6 +14,8 @@ from __future__ import annotations
 import argparse
 import glob
 import re
+from collections import Counter
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import polars as pl
@@ -100,6 +102,48 @@ def drop_house_conflicts(base: pl.DataFrame, s1: pl.DataFrame, targets: pl.DataF
                      on=["source1_entity_id", "matched_entity_ids"], how="anti")
 
 
+FILLERS = {"center", "services", "service", "partners", "france"}
+
+
+def subsequence(short: str, long_: str) -> bool:
+    it = iter(long_)
+    return all(ch in it for ch in short)
+
+
+def common_swap(s_core: str, t_core: str, df: Counter) -> bool:
+    """One Source 1 word replaced by another common vocabulary word: the decoy perturbation
+    (true records use a filler such as 'services', an abbreviation or a typo instead)."""
+    s, t = (s_core or "").split(), (t_core or "").split()
+    ss, ts = set(s), set(t)
+    miss = [w for w in s if w not in ts]
+    extra = [w for w in t if w not in ss]
+    if len(miss) != 1 or len(extra) != 1:
+        return False
+    a, b = miss[0], extra[0]
+    if b in FILLERS or df.get(b, 0) < 20 or SequenceMatcher(None, a, b).ratio() >= 0.75:
+        return False
+    return not (subsequence(b, a) or subsequence(a, b))
+
+
+def drop_swaps(base: pl.DataFrame, s1: pl.DataFrame, targets: pl.DataFrame, country: str) -> pl.DataFrame:
+    """Drop accepted pairs of the unlabelled country whose name differs by one common-word swap.
+    In training such same-address pairs are true only 45% of the time (test has twice the decoys)."""
+    s_norm = read("cache/test_source1.tsv").select("entity_id", "name_core").join(
+        s1.select("entity_id", "country"), on="entity_id")
+    t_norm = pl.concat([read(f"cache/test_source{i}.tsv").select("entity_id", "name_core") for i in (2, 3)])
+    df: Counter = Counter()
+    for core in s_norm.filter(pl.col("country") == country)["name_core"]:
+        df.update(set(core.split()))
+    rows = (base.join(s_norm.rename({"name_core": "s_core"}), left_on="source1_entity_id", right_on="entity_id")
+            .filter(pl.col("country") == country)
+            .join(t_norm.rename({"name_core": "t_core"}), left_on="matched_entity_ids", right_on="entity_id"))
+    flag = [common_swap(a, b, df) for a, b in zip(rows["s_core"].to_list(), rows["t_core"].to_list())]
+    dropped = rows.filter(pl.Series(flag, dtype=pl.Boolean))
+    print(f"{country}: dropping {dropped.height:,} accepted pairs that swap one word for another common word", flush=True)
+    return base.join(dropped.select("source1_entity_id", "matched_entity_ids"),
+                     on=["source1_entity_id", "matched_entity_ids"], how="anti")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--calibrated", required=True, help="matching_results.tsv with calibrated decisions")
@@ -109,6 +153,8 @@ def main() -> None:
     parser.add_argument("--typo-jw", type=float, default=0.92)
     parser.add_argument("--drop-conflicts", action="store_true",
                         help="Drop accepted pairs whose house numbers conflict (not typo-close)")
+    parser.add_argument("--drop-swaps", action="store_true",
+                        help="Drop accepted pairs whose name swaps one word for another common word")
     args = parser.parse_args()
 
     s1 = read("dataset/test/test_source1.tsv").with_row_index("si")
@@ -151,6 +197,8 @@ def main() -> None:
     base = calibrated.select("source1_entity_id", "matched_entity_ids")
     if args.drop_conflicts:
         base = drop_house_conflicts(base, s1, targets, args.country)
+    if args.drop_swaps:
+        base = drop_swaps(base, s1, targets, args.country)
     merged = pl.concat([base, keep.select("source1_entity_id", "matched_entity_ids")])
     lists = merged.group_by("source1_entity_id").agg(
         pl.col("matched_entity_ids").unique().sort().str.join(","))
