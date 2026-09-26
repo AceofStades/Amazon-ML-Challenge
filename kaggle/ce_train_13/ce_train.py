@@ -48,7 +48,8 @@ def mean_pool(output: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
 class CrossEncoder(torch.nn.Module):
     def __init__(self, name: str):
         super().__init__()
-        self.model = AutoModel.from_pretrained(name, add_pooling_layer=False)
+        # Some checkpoints ship in fp16; train in fp32 under autocast so the grad scaler can unscale.
+        self.model = AutoModel.from_pretrained(name, add_pooling_layer=False, torch_dtype=torch.float32)
         self.head = torch.nn.Linear(self.model.config.hidden_size, 1)
 
     def forward(self, batch):
