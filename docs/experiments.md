@@ -606,3 +606,28 @@ France recall hoped for. The audit instead finds 104 additional p1 at least
 0.99 candidates affected by the literal `ndeg` prefix, including 93 exact
 names and 33 with address cosine below 0.6. Some overlap the equality draft;
 do not add the pool sizes together. No decisions changed. Compilation passes.
+
+## Explicit French house-number prefix correction (2026-09-27)
+
+The conflict pruner ignores digits glued to letters so street artifacts such as
+`cite1` and `chem1` do not become house numbers. That also incorrectly ignores
+`ndeg210`, the normalized spelling of an explicit French number prefix.
+An address with house 210 and apartment 74 can therefore appear to conflict
+with source house 210.
+
+`scripts/france_audit_ndeg.py` measures this correction on the rejection and
+short-address artifacts. It finds 286 newly nonconflicting pairs across 217
+targets before score/name safeguards; 188 safe-name pairs have p1 at least
+0.9 and 184 have p1 at least 0.99. All 184 high-score pairs were already
+accepted before house pruning. Training contains no literal `ndeg` targets;
+the analogous exact-address parser rejections at p1 at least 0.8 are 1,481
+labelled pairs, all true. France restoration precision remains unmeasured.
+
+`standalone_target_numbers` in `amzn.france_rule` now removes only the explicit
+`ndeg` prefix before extracting numbers. The source-house parser and common
+word swap rule retain their existing behavior. Four fixture tests cover
+prefixes, apartment numbers, street artifacts, zero padding, nulls, actual
+house conflicts, country scope and the common-swap guard. They pass with
+`env POLARS_MAX_THREADS=2 PYTHONPATH=src .venv/bin/python -m unittest src.tests.test_france_house_numbers`.
+The noon assembly still merges the saved France baseline; this correction
+does not silently change that first submission.

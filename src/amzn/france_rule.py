@@ -98,16 +98,23 @@ def typo_close(a: str, b: str) -> bool:
         long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
 
 
+def standalone_target_numbers(addresses: pl.Series) -> pl.Series:
+    """Extract target address numbers, including the explicit French 'n°' prefix.
+
+    Normalization spells that prefix 'ndeg'. Other digits glued to letters
+    ('cite1', 'espl1', 'chem1') are street-type artifacts, not house numbers.
+    """
+    return (addresses.fill_null("").str.replace_all(r"\bndeg(\d+)", r"${1}")
+            .str.extract_all(r"(?:^|[^a-z0-9])(\d+)").list.eval(
+                pl.element().str.replace_all(r"[^0-9]", "").str.strip_chars_start("0").replace("", "0")))
+
+
 def drop_house_conflicts(base: pl.DataFrame, s1: pl.DataFrame, targets: pl.DataFrame, country: str) -> pl.DataFrame:
     """For the unlabelled country, drop accepted pairs whose house numbers conflict unless typo-close:
     its decoys repeat the business name at another number on the same street."""
-    def standalone(frame: pl.DataFrame) -> pl.Series:
-        # Digits glued to letters ('cite1', 'espl1', 'chem1') are street-type artifacts, not house numbers.
-        return frame["address"].fill_null("").str.extract_all(r"(?:^|[^a-z0-9])(\d+)").list.eval(
-            pl.element().str.replace_all(r"[^0-9]", "").str.strip_chars_start("0").replace("", "0"))
     s_norm = read("cache/test_source1.tsv").select("house")
     t_norm = pl.concat([read(f"cache/test_source{i}.tsv").select("address") for i in (2, 3)])
-    t_numbers = standalone(t_norm)
+    t_numbers = standalone_target_numbers(t_norm["address"])
     rows = (base.join(s1.select("entity_id", "si", "country"), left_on="source1_entity_id", right_on="entity_id")
             .join(targets.select("entity_id", "ti"), left_on="matched_entity_ids", right_on="entity_id"))
     focus = rows.filter(pl.col("country") == country)
