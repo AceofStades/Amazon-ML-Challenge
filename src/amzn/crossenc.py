@@ -39,7 +39,7 @@ def record_texts(data_dir: Path, split: str) -> tuple[list[str], list[str]]:
 class CrossEncoder(torch.nn.Module):
     def __init__(self, name: str):
         super().__init__()
-        self.model = AutoModel.from_pretrained(name)
+        self.model = AutoModel.from_pretrained(name, add_pooling_layer=False)
         self.head = torch.nn.Linear(self.model.config.hidden_size, 1)
 
     def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
@@ -77,8 +77,8 @@ def train(args: argparse.Namespace) -> None:
     torch.manual_seed(args.seed)
     pairs = training_pairs(args)
     source1, targets = record_texts(Path(args.data_dir), "train")
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-    model = CrossEncoder(BASE_MODEL).cuda()
+    tokenizer = AutoTokenizer.from_pretrained(args.base_model)
+    model = CrossEncoder(args.base_model).cuda()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     si, ti, labels = pairs["si"].to_numpy(), pairs["ti"].to_numpy(), pairs["label"].to_numpy()
     total = len(si) // args.batch_size
@@ -164,6 +164,8 @@ def main() -> None:
     p.add_argument("--lr", type=float, default=4e-5)
     p.add_argument("--min-bucket", type=int, default=100)
     p.add_argument("--seed", type=int, default=1)
+    p.add_argument("--base-model", default=BASE_MODEL,
+                   help="MIT/Apache encoder to fine-tune, e.g. intfloat/multilingual-e5-base")
     p = sub.add_parser("score")
     p.add_argument("--split", choices=("train", "test"), required=True)
     p.add_argument("--data-dir")
