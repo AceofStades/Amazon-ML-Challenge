@@ -860,7 +860,7 @@ A helper with no session context re-checked the scoring assumptions and tested n
 Conclusion: no pool of 5k+ links clears the ~0.73 break-even; reaching 0.990 would need about 20k links at >= 90%
 precision. The France loss is spread thin, mostly in the address-less owner choice.
 
-## Source-balance test on France pools and file 18 (2026-09-27 21:30-22:10)
+## Source-balance test on France pools and file 18 (2026-09-27 21:10-21:45)
 
 The helper's source-balance test, calibrated on France itself (reference = accepted exact-name links, fill 0.728),
 reads the common-word swaps with blend >= 0.95 that file 12 added (leaderboard: about 25% true) at -0.07 +/- 0.09,
