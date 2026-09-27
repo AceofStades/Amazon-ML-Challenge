@@ -183,6 +183,7 @@ the encoder, the cross-encoders or the matchers. `docs/experiments.md` lists eve
 | + France house-conflict rule and confident cross-encoder pairs | 0.992 | 0.9884 |
 | + 23 cross-encoders with full-competition target context (US/India) | 0.993 | 0.98926 |
 | + 29 cross-encoders; France address-less links from the context composition model | 0.993 | 0.98927 |
+| + France same-house made-up brands with blend >= 0.95 (final submission) | 0.993 | **0.98939** |
 
 The holdout column counts links inside the candidate sets; the full holdout value is about 0.001 lower (candidate
 recall 0.997), which matches the US/India part of the leaderboard.

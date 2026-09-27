@@ -872,3 +872,10 @@ The low reading for accepted "adds another word" links (0.17, `scripts/fr_drop_b
 generator adds independently of the source balance: "X t/a Y" aliases and English organisation suffixes on French
 non-profits (Board, Trust, Foundation, Commission...), which are about 100% true at the same house in training.
 File 18 = file 17 + 2,783 high-blend France brands (`scripts/france_brand_add.py`); expected +0.00003.
+
+## Leaderboard: file 18, final (2026-09-27 22:45)
+
+File 18 (file 17 + 2,783 France same-house made-up brands with blend >= 0.95) scored **0.989389**, the best and last
+leaderboard upload (+0.00012 over file 17, above the source-balance estimate). Public rank 109. The final package
+(`output/claudes_plan_submission.zip`) is built from it; candidate_pairs.tsv is the full blocking set (108M pairs,
+about 62 per Source 1 entity) because the final blend scores every blocking candidate.

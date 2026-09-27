@@ -102,7 +102,11 @@ uv run python scripts/compose.py test --cv-scores output/cv_p1only.parquet --tes
 mkdir -p output/final_frna
 uv run python scripts/france_noaddr_compose.py merge output/final_final/matching_results.tsv output/compose_fr_p1/matching_results.tsv \
     output/final_frna/matching_results.tsv
-cp output/final_frna/matching_results.tsv output/final_final/candidate_pairs.tsv output/
+
+# 11. France same-house made-up brand records that the blend scores >= 0.95 on unclaimed targets (final file).
+mkdir -p output/final_brand
+uv run python scripts/france_brand_add.py output/final_frna/matching_results.tsv output/final_brand/matching_results.tsv 0.95
+cp output/final_brand/matching_results.tsv output/final_final/candidate_pairs.tsv output/
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
     --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids

@@ -506,3 +506,9 @@ df -h / ; du -sh output/* | sort -h | tail                  # disk
 - One upload left, at 23:30. File 16 (`output/final_fleetZ`) is the fallback; a helper agent is testing new angles
   and reports by 22:30. The deliverable zip is rebuilt from file 17 (`output/final_fleetZ_frna`); README step 10 and
   `scripts/france_noaddr_compose.py` reproduce its France step exactly.
+
+## Status update (2026-09-27 22:55 IST, final)
+
+- File 18 scored **0.989389** (best, last upload; public rank 109). No uploads left.
+- Final package: `output/claudes_plan_submission.zip` (664 MB) built from `output/final_fleetZ_frna_brand` with
+  README steps 1-11 (step 10: France address-less composition, step 11: France high-blend brands).
