@@ -111,10 +111,19 @@ pairs of buckets 0-99. Ten-fold cross-validation over 220k entities (each fold o
 fitted on the other ninety) gives macro F0.5 0.99167 with all 22 cross-encoders against 0.99129 with six, better in
 every fold.
 
-**Composition rescoring** (`scripts/compose.py`): ambiguous pairs (0.01 <= p < 0.99) are rescored with features of
-the entity's confident matches: counts per source, records without an address, noise-kind counts (at most one
-alias, rarely two acronyms or domains), how well the extra record fits the training composition, and competing
-claims on the target. Cross-validated F0.5 +0.0002; applied to labelled countries.
+**Full-competition target context** (`scripts/ctx_features.py`): the cross-validated blend only sees the 220k
+cross-validated entities, so competition for a target is understated there. Stage-1 scores exist for every candidate
+entity of every target (out-of-fold on all 2.2M training entities), so a target's full competition is summarized the
+same way on training and test: the pair's stage-1 score over the sum for all candidate entities of the target, their
+number, the best competitor's score, raw name token-set agreement (legal forms and dotted letters kept) and how many
+candidates share it. As blend inputs these raise cross-validated F0.5 from 0.99167 to 0.99261.
+
+**Composition rescoring** (`scripts/compose.py --extra`): ambiguous pairs (0.01 <= p < 0.99) are rescored with
+features of the entity's confident matches (counts per source, records without an address, noise-kind counts, how
+well the extra record fits the training composition, competing claims) plus the same target context. On top of the
+context blend: 0.99261 -> 0.99270. Because the cross-validation leaves out the competitors outside the validated
+entities, results are also checked in a test-like view that drops targets owned outside that set: 22-model blend
+0.99269, context blend 0.99314, with composition 0.99327. Applied to labelled countries.
 
 **Why no entity-context stage:** a second XGBoost stage with entity context was tried. Its inputs were rank and
 sums of scores per entity, sibling support, the strongest competing Source 1 claim per target, and house-number
@@ -172,6 +181,7 @@ the encoder, the cross-encoders or the matchers. `docs/experiments.md` lists eve
 | + generator-aware features and e5-base cross-encoder | 0.992 | 0.9874 |
 | + composition rescoring, France safe-class additions | 0.992 | 0.9876 |
 | + France house-conflict rule and confident cross-encoder pairs | 0.992 | 0.9884 |
+| + 23 cross-encoders with full-competition target context (US/India) | 0.993 | final |
 
 The holdout column counts links inside the candidate sets; the full holdout value is about 0.001 lower (candidate
 recall 0.997), which matches the US/India part of the leaderboard.
