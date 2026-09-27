@@ -436,3 +436,26 @@ tail -n 2 logs/gpu_chain.log logs/gpu_chain2.log            # local GPU chain
 PYTHONPATH=src .venv/bin/python scripts/eval_holdout.py output/blend_A output/blend_B   # holdout comparison
 df -h / ; du -sh output/* | sort -h | tail                  # disk
 ```
+
+---
+
+## Status update (2026-09-27 10:40 IST)
+
+- Leaderboard: file 10 0.987648, **file 11 0.988413 (best)**, file 12 0.987802. Rank 1: 0.991483.
+- Two submissions left, planned for **17:00** and **23:30**.
+- Staged: `output/to_submit/13_file11_france_plus_all22_blend_usin_plus_owner_model_matching_results.tsv`
+  (= `output/final_safe_own`). It combines file 11's France, the 22-model blend + composition for US/India, and 3,083
+  US/India address-less owner-model assignments. Expected 0.9887-0.9889.
+- Do **not** use the 22-model blend for France. Several new cross-encoders inflate France scores. Do **not** add
+  same-house common-word swaps; file 12 showed they are ~25% true.
+- The last local cross-encoder (`scripts/gpu_chain4.sh`, e5-base on hard pairs seed 161) lands around 15:00. Then:
+  1. Run `./scripts/final_assemble.sh fleetB output/final_pre1_frcu/matching_results.tsv`.
+  2. If the CV beats fleetA's 0.99167, rebuild file 13 from it:
+     `merge_france.py` with France from `final_pre1_frcu`, then
+     `add_owner.py --countries US,India --min-pm 0.9` (rerun `scripts/noaddr_owner.py` on the new base first).
+- Optional: France owner-model picks at pm >= 0.9 (819). They are mostly unique-name records (q ~ 1). The spot check
+  looks right, but they are not leaderboard-tested.
+- Findings are logged in `docs/experiments.md` (section "Leaderboard: composition, France decoy structure ...").
+- The session transcripts are in `.session/` (git-ignored; they contain the hades password, never commit them) and in
+  `~/.claude/projects/-home-aceofstades-code-amzn/`, so `claude --resume 0eca6fab-c753-4b4a-872b-124a1ee7098e` works
+  when started in `~/code/amzn`.

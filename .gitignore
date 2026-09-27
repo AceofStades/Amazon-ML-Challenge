@@ -13,3 +13,4 @@ kaggle/processed/
 kaggle/data_v/
 kaggle/data_model/
 kaggle/data_hard/
+.session/
