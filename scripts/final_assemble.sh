@@ -1,5 +1,6 @@
 #!/bin/sh
-# Final submission assembly: cross-validated fleet blend (every landed cross-encoder), hybrid, composition rescoring for
+# Final submission assembly: cross-validated fleet blend (every landed cross-encoder), hybrid, composition rescoring
+# (with full-competition target context) for
 # the labelled countries, France decisions from a finished France file, validation.
 # Usage: ./scripts/final_assemble.sh NAME FRANCE_FILE   (outputs output/final_NAME/{matching_results,candidate_pairs}.tsv)
 set -e
@@ -24,7 +25,7 @@ $PY -m amzn.blend --model-dir output/v7 --extras name,full,gen $EXTRA --depth 6 
 $PY -m amzn.hybrid --blend-dir output/blend_$NAME --output-dir output/hybrid_$NAME
 mkdir -p output/compose_$NAME output/final_$NAME
 $PY scripts/compose.py test --cv-scores output/cv_$NAME.parquet --test-calibrated output/hybrid_$NAME/test_calibrated.parquet \
-    --countries US,India --output output/compose_$NAME/matching_results.tsv
+    --countries US,India --extra --output output/compose_$NAME/matching_results.tsv
 $PY scripts/merge_france.py --usin output/compose_$NAME/matching_results.tsv --france $FRANCE \
     --output output/final_$NAME/matching_results.tsv
 ln -f output/hybrid_$NAME/candidate_pairs.tsv output/final_$NAME/candidate_pairs.tsv

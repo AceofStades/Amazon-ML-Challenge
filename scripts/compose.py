@@ -32,6 +32,7 @@ FEATURES = ["logit_p", "t_s3", "t_noaddr", "c2", "c3", "cna", "ctot", "fit_src",
 # Full-competition target context (--extra): stage-1 scores of every candidate entity of the target, which are computed
 # the same way on training (out-of-fold) and test, unlike the claims above that only see the scored entities.
 EXTRA = ["q1", "m1", "top_other1", "s_tok_eq", "s_fold_eq", "n_s_tok_eq"]
+EXTRA2 = ["o_tok_eq", "o_fold_eq"]
 KINDS = {"other": 0, "domain": 1, "acronym": 2, "alias": 3, "brand": 4}
 
 
@@ -79,14 +80,14 @@ def log_count(table: dict, key) -> float:
     return float(np.log(table.get(key, 0) + 0.5))
 
 
-def features(frame: pl.DataFrame, info: pl.DataFrame, src: dict, na: dict) -> pl.DataFrame:
+def features(frame: pl.DataFrame, info: pl.DataFrame, src: dict, na: dict, lo: float = LO, hi: float = HI) -> pl.DataFrame:
     """frame: si, ti, p (all candidate pairs of the entities). Returns ambiguous pairs with features."""
     x = frame.join(info, on="ti", how="left")
     conf = x.filter(pl.col("p") >= CONF)
     ent = conf.group_by("si").agg((1 - pl.col("t_s3")).sum().alias("C2"), pl.col("t_s3").sum().alias("C3"),
                                   pl.col("t_noaddr").sum().alias("CNA"))
     kinds = conf.filter(pl.col("t_kind") > 0).group_by("si", "t_kind").len().rename({"len": "same_kind_conf"})
-    amb = x.filter((pl.col("p") >= LO) & (pl.col("p") < HI)).join(ent, on="si", how="left").fill_null(0)
+    amb = x.filter((pl.col("p") >= lo) & (pl.col("p") < hi)).join(ent, on="si", how="left").fill_null(0)
     amb = amb.with_columns(pl.col("C2").alias("c2"), pl.col("C3").alias("c3"), pl.col("CNA").alias("cna"))
     amb = amb.join(kinds, on=["si", "t_kind"], how="left").with_columns(
         pl.when(pl.col("t_kind") > 0).then(pl.col("same_kind_conf").fill_null(0)).otherwise(0).cast(pl.Float32).alias("same_kind_conf"))
@@ -165,6 +166,23 @@ def extra_features(amb: pl.DataFrame, split: str) -> pl.DataFrame:
     return amb.join(c.select("si", "ti", *EXTRA), on=["si", "ti"], how="left").with_columns([pl.col(f).fill_null(0.0) for f in EXTRA])
 
 
+def extra2_features(amb: pl.DataFrame, frame: pl.DataFrame, split: str) -> pl.DataFrame:
+    """o_tok_eq / o_fold_eq: the target's raw token set / folded name equals that of one of the entity's confident
+    records (p >= CONF), i.e. the same noisy variant already matched to this entity."""
+    raw2 = pl.concat([read(f"dataset/{split}/{split}_source{i}.tsv", ["business_name"]) for i in (2, 3)])["business_name"]
+    conf = frame.filter(pl.col("p") >= CONF).select("si", pl.col("ti").alias("ci")).join(amb.select("si").unique(), on="si", how="semi")
+    need = pl.concat([conf.select(pl.col("ci").alias("ti")), amb.select("ti")]).unique()
+    tok = need.with_columns(raw2.gather(need["ti"].to_numpy()).alias("n"))
+    tok = tok.with_columns(pl.col("n").map_elements(_tokset, return_dtype=pl.String).alias("tok"),
+                           pl.col("n").map_elements(_fold, return_dtype=pl.String).alias("fold")).drop("n")
+    c = conf.join(tok.rename({"ti": "ci", "tok": "ctok", "fold": "cfold"}), on="ci")
+    a = amb.select("si", "ti").join(tok, on="ti")
+    m = a.join(c, on="si").filter(pl.col("ci") != pl.col("ti")).group_by("si", "ti").agg(
+        (pl.col("tok") == pl.col("ctok")).any().cast(pl.Float32).alias("o_tok_eq"),
+        (pl.col("fold") == pl.col("cfold")).any().cast(pl.Float32).alias("o_fold_eq"))
+    return amb.join(m, on=["si", "ti"], how="left").with_columns([pl.col(f).fill_null(0.0) for f in EXTRA2])
+
+
 def macro_f05(frame: pl.DataFrame, column: str, entities: int) -> float:
     scored = one_to_one(frame.select("si", "ti", column), column)
     chosen = decode(scored["si"].to_numpy(), scored["ti"].to_numpy(), scored[column].to_numpy(), "expected", 0.05, 0.0)
@@ -183,15 +201,17 @@ def cv(args) -> None:
     scores = pl.read_parquet(args.scores).with_columns(pl.col("p2").alias("p"))
     src, na = joint_tables()
     info = target_info("train", scores["ti"])
-    amb = features(scores.select("si", "ti", "p"), info, src, na).join(scores.select("si", "ti", "label", "bucket"), on=["si", "ti"])
-    feats = FEATURES + (EXTRA if args.extra else [])
+    amb = features(scores.select("si", "ti", "p"), info, src, na, args.lo, args.hi).join(scores.select("si", "ti", "label", "bucket"), on=["si", "ti"])
+    feats = FEATURES + (EXTRA if args.extra else []) + (EXTRA2 if args.extra2 else [])
     if args.extra:
         amb = extra_features(amb, "train")
+    if args.extra2:
+        amb = extra2_features(amb, scores.select("si", "ti", "p"), "train")
     print(f"ambiguous pairs {amb.height:,}, positive rate {amb['label'].mean():.3f}", flush=True)
     X, y = amb.select(feats).to_numpy(), amb["label"].to_numpy()
     fold = (amb["bucket"] // 10).to_numpy()
     p3 = np.zeros(amb.height, dtype=np.float32)
-    params = {"objective": "binary:logistic", "eval_metric": "logloss", "max_depth": 5, "eta": 0.1, "tree_method": "hist", "seed": 1}
+    params = {"objective": "binary:logistic", "eval_metric": "logloss", "max_depth": args.depth, "eta": 0.1, "tree_method": "hist", "seed": 1}
     for k in range(10):
         fit, val = fold != k, fold == k
         model = xgb.train(params, xgb.DMatrix(X[fit], label=y[fit], feature_names=feats), 600,
@@ -230,19 +250,23 @@ def test(args) -> None:
     from amzn.infer_v3 import grouped_tsv
     scores = pl.read_parquet(args.cv_scores).with_columns(pl.col("p2").alias("p"))
     src, na = joint_tables()
-    amb = features(scores.select("si", "ti", "p"), target_info("train", scores["ti"]), src, na).join(
+    amb = features(scores.select("si", "ti", "p"), target_info("train", scores["ti"]), src, na, args.lo, args.hi).join(
         scores.select("si", "ti", "label"), on=["si", "ti"])
-    feats = FEATURES + (EXTRA if args.extra else [])
+    feats = FEATURES + (EXTRA if args.extra else []) + (EXTRA2 if args.extra2 else [])
     if args.extra:
         amb = extra_features(amb, "train")
-    params = {"objective": "binary:logistic", "eval_metric": "logloss", "max_depth": 5, "eta": 0.1, "tree_method": "hist", "seed": 1}
+    if args.extra2:
+        amb = extra2_features(amb, scores.select("si", "ti", "p"), "train")
+    params = {"objective": "binary:logistic", "eval_metric": "logloss", "max_depth": args.depth, "eta": 0.1, "tree_method": "hist", "seed": 1}
     model = xgb.train(params, xgb.DMatrix(amb.select(feats).to_numpy(), label=amb["label"].to_numpy(), feature_names=feats),
                       args.rounds)
     countries = pl.read_parquet("cache/embeddings/test_source1_ids.parquet").select("country").with_row_index("si")
     cal = pl.read_parquet(args.test_calibrated).join(countries, on="si").filter(pl.col("country").is_in(args.countries.split(",")))
-    tamb = features(cal.select("si", "ti", "p"), target_info("test", cal["ti"]), src, na)
+    tamb = features(cal.select("si", "ti", "p"), target_info("test", cal["ti"]), src, na, args.lo, args.hi)
     if args.extra:
         tamb = extra_features(tamb, "test")
+    if args.extra2:
+        tamb = extra2_features(tamb, cal.select("si", "ti", "p"), "test")
     tamb = tamb.with_columns(pl.Series("p3", model.predict(xgb.DMatrix(tamb.select(feats).to_numpy(), feature_names=feats))))
     print(f"test ambiguous pairs {tamb.height:,}; mean p {tamb['p'].mean():.4f} -> {tamb['p3'].mean():.4f}", flush=True)
     full = cal.join(tamb.select("si", "ti", "p3"), on=["si", "ti"], how="left").with_columns(pl.coalesce("p3", "p").alias("p_new"))
@@ -272,6 +296,11 @@ def main() -> None:
     t.add_argument("--rounds", type=int, default=250)
     t.add_argument("--output", required=True)
     t.add_argument("--extra", action="store_true", help="add full-competition target context features")
+    for sp in (c, t):
+        sp.add_argument("--extra2", action="store_true", help="add raw-name agreement with the entity's confident records")
+        sp.add_argument("--lo", type=float, default=LO)
+        sp.add_argument("--hi", type=float, default=HI)
+        sp.add_argument("--depth", type=int, default=5)
     args = parser.parse_args()
     if args.cmd == "cv":
         cv(args)
