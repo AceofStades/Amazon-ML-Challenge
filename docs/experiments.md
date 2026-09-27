@@ -799,7 +799,7 @@ composition 0.99327 for both. The file changes 3.4k+/1.0k- US links (1.1k made-u
 and 0.8k+/1.5k- India links; France is file 13's. Staged as file 16 (`output/final_fleetZ`); expected about equal to
 file 13. Kernels 35-42 were still training at 19:00.
 
-## Displacement test: label-free check of whole link classes (2026-09-27 20:00-21:40)
+## Displacement test: label-free check of whole link classes (2026-09-27 19:10-19:40)
 
 True noise replaces one of an entity's records, so entities holding a link of a noise class have fewer other links
 than their peers (after size bias); a decoy is an extra record and leaves the entity's other links unchanged.
