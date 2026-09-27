@@ -27,7 +27,7 @@ CONFIG = {
     "lr": 2e-5,
     "max_pairs": 3_000_000,
     "valid_pairs": 30_000,
-    "budget_hours": 7.0,
+    "budget_hours": 5.0,
     "output": "/kaggle/working/ce_model",
 }
 STARTED = time.time()
