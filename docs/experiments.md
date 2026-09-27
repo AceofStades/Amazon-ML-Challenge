@@ -762,3 +762,31 @@ submission's decisions match the training structure class by class.
 - The US/India class shares that looked low against training (same-house added words 77% accepted vs 91% true in
   training) are explained by the decoy suffixes above (0% accepted, 14.7% of the class in test vs 5.9% in training)
   and by the country mix (llp and limited are India-only: per India entity their accepted rates match training).
+
+## Where the France loss is not (2026-09-27 18:30-19:00)
+
+The leaderboard implies France F0.5 of about 0.96-0.975 (file 9 fixes France F0.5 minus the France singleton rate at
+0.911 for file 7; a France singleton rate at or below the predicted 5.8% empty keeps France at or below about 0.972),
+so France loses 0.01-0.02 beyond what its missing links explain, which points at false links or singleton false merges.
+Structural checks found no pool of that size (tens of thousands of pairs):
+- **Per-entity accounting of all records** (`scripts/target_pool.py`): France leaves 2.25 records per entity
+  unassigned (US 2.36, India 2.43), with a smaller low-score pool and larger mid/high-score pools (swaps, brands,
+  nearby added words). If France had US/India's ~2.3 decoys per entity, it would have only ~3.23 true links per
+  entity and about 0.14 false links per entity among the accepted 3.28; if it had 3.46 true links, it misses about
+  0.18. The data cannot tell these apart.
+- **Link budget** (`scripts/link_budget.py`): US and India submissions match the training truth category by category
+  (for example 0.7618 vs 0.7618 same-house different-name links per entity). France's accepted structure differs a
+  lot (2.15 same-house similar-name links per entity vs 1.60, almost no house conflicts): France records are cleaner.
+- **Suffix position** (`scripts/suffix_position.py`, `scripts/suffix_position_train.py`): in training, true filler
+  noise appends the word after the legal form ("Nova LLC Services", 99.4% true at the same house) while decoys insert
+  a related-company word before it or replace it ("Gold Brothers Group LLP", 0% true). France's same-house
+  Groupe/& Fils/& Associes/Cie/Services/Developpement/France pairs are 25.0k after the legal form, 13.9k without one
+  and 4.0k before it, the true-noise pattern, so they stay accepted.
+- **Nearby filler records**: France has 20.3k nearby-house pairs with a filler after the legal form; their counts are
+  0.27 times the same-house filler counts word by word, but in training the same pattern within 30 numbers is only
+  14-20% true (`scripts/near_filler_train.py`), so they stay rejected.
+- **Cities** (`scripts/fr_city_check.py`): France has 16 cities; 816.8k accepted links agree on the city, 1.5k
+  disagreements are parsing artefacts ("Rue de Lille" in Dunkerque).
+- **Composition of accepted links** (Source 2 vs 3 split, one-link entities, empty entities): France shows fewer
+  links per entity than training truth (more one- and two-link entities), with no class over-represented.
+- **Near-duplicate Source 1 entities**: 87 in France, none elsewhere.
