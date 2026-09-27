@@ -705,3 +705,17 @@ More checks (13:00-13:40): a 24th cross-encoder (third local e5-base) leaves the
 vs 0.99261), so the ensemble is saturated. Composition with context on a stage-1-only scorer (the kind France uses)
 gains +0.00087 in the test-like US/India view (0.98560 -> 0.98648); not applied to France, where the decoy classes
 differ from the US/India ones the model would learn.
+
+## Leaderboard: context blend (file 13) and the final plan
+
+File 13 (file 11's France + context blend with context composition for US/India) scored **0.989261** (+0.00085 over
+file 11, in line with the test-like CV gain). The context composition applied to France's stage-1 scores
+(trained on US/India stage-1 CV) would add 23.6k common-word swaps and 6.0k made-up brands (France decoy classes)
+and drop 3.1k acronyms and 2.9k exact names, so it is not used for France. France entities predicted empty
+(15,067) whose best unclaimed candidate scores p1 > 0.7 (2,059) are mostly paired with same-house swaps (1,364)
+and nearby added-word records (336): France's decoys, so no top-up there.
+
+Final file (`scripts/final_night.sh`): US/India from a rebuild with every landed cross-encoder (kept only if its
+CV is not below the 23-model context blend), France = file 13's France plus pairs the six-model blend scores
+0.9-0.98 on unclaimed targets (swaps, brands and nearby added-word conflicts excluded; 2,894) and the address-less
+owner-model picks (819).
