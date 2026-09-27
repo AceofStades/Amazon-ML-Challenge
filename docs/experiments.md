@@ -821,3 +821,12 @@ country; composition restricted to address-less records gains +0.0003 in the US/
 (+0.0009 for full composition), and applied to France address-less records it changes -1,060/+1,348 links (file 17).
 Conclusion: France's leaderboard deficit (about 0.012 F0.5 beyond what its missed links explain) is not in any large
 class we can test; it is spread thin or lies in the owner choice among same-name entities.
+
+## France house-conflict check (2026-09-27 ~20:00)
+
+Rejected France same-street house-conflict candidates scoring p1 >= 0.3 show a displacement deficit (-0.17 to -0.37;
+US/India about 0), but pure decoy-word candidates ("Holding", "International") with p1 >= 0.3 show the same deficit
+(-0.32) and every p1 < 0.3 group sits at 0, so it is a selection effect of high-scoring rejects, not true records
+(`scripts/fr_conflict_displacement.py`, `scripts/fr_conflict_control.py`). The house-change type mix (dropped digit
+9-11%, inner digit 2-3%, last digit, unrelated 72%) is identical across decoy-word, legal-form, shared-word, filler and
+no-added-word groups, so France's typo-like number changes are chance collisions of small house numbers. No addition.
