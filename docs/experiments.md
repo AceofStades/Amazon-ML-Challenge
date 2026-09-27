@@ -859,3 +859,16 @@ A helper with no session context re-checked the scoring assumptions and tested n
   alternative exists.
 Conclusion: no pool of 5k+ links clears the ~0.73 break-even; reaching 0.990 would need about 20k links at >= 90%
 precision. The France loss is spread thin, mostly in the address-less owner choice.
+
+## Source-balance test on France pools and file 18 (2026-09-27 21:30-22:10)
+
+The helper's source-balance test, calibrated on France itself (reference = accepted exact-name links, fill 0.728),
+reads the common-word swaps with blend >= 0.95 that file 12 added (leaderboard: about 25% true) at -0.07 +/- 0.09,
+and splits unclaimed same-house made-up brands by blend score: >= 0.95: 0.83 +/- 0.11, 0.5-0.95: 0.66, < 0.5: 0.06
+(`scripts/fr_cand_balance.py`). A scan of every unclaimed France candidate class (`scripts/fr_pool_balance.py`) finds
+nothing else above break-even at scale. Accepted-link classes (`scripts/fr_acc_balance.py`) are all a few points below
+US/India, including exact names (0.94), the uniform dip that France's missed minority-source links produce.
+The low reading for accepted "adds another word" links (0.17, `scripts/fr_drop_balance.py`) comes from records the
+generator adds independently of the source balance: "X t/a Y" aliases and English organisation suffixes on French
+non-profits (Board, Trust, Foundation, Commission...), which are about 100% true at the same house in training.
+File 18 = file 17 + 2,783 high-blend France brands (`scripts/france_brand_add.py`); expected +0.00003.
