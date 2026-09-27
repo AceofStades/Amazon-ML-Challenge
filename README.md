@@ -69,12 +69,31 @@ uv run python -m amzn.kaggle_export --skip-texts --hard-from output/v7 --seed 41
 ./scripts/run_ce_base.sh
 ./scripts/run_ce_base_hard.sh
 
-# 7. Generator-aware name features, pairwise blend of stage 1 and every cross-encoder, per-country scorer choice,
-#    calibration and decoding, then the generator-pattern rules for countries without labels (France).
+# 7. Generator-aware name features and full-competition target context (stage-1 score of every candidate entity
+#    of each target, renormalized; raw name token-set agreement).
 uv run python -m amzn.gen_features --split train
 uv run python -m amzn.gen_features --split test
-./scripts/fleet_blend.sh final   # output/blend_final, output/hybrid_final, output/sub_final/*.tsv
-cp output/sub_final/matching_results.tsv output/sub_final/candidate_pairs.tsv output/
+uv run python scripts/ctx_features.py train
+uv run python scripts/ctx_features.py test
+
+# 8. France (the country without labels). Six-model blend (small e5 x3, e5-base, e5-large x2), stage-1 scorer with
+#    segment calibration and the generator-pattern rules, safe-class additions from the clean calibration, the
+#    house-conflict rule and the confident cross-encoder pairs. Only the France rows of these files are used.
+#    (Cross-encoder directories other than the six below must be moved aside while running fleet_blend.sh auto2.)
+./scripts/fleet_blend.sh auto2        # b, base, base_hard, c, large, large2 -> output/sub_auto2
+uv run python -m amzn.hybrid --blend-dir output/blend_auto2 --fallback-calibration segment-clean --output-dir output/hybrid_auto2_clean
+uv run python -m amzn.france_rule --calibrated output/hybrid_auto2_clean/matching_results.tsv --raw output/hybrid_L_frnone/matching_results.tsv \
+    --drop-conflicts --drop-swaps --add-initials --output output/sub_auto2_clean/matching_results.tsv
+uv run python scripts/merge_france.py --usin output/sub_auto2/matching_results.tsv --france output/sub_auto2/matching_results.tsv \
+    --france-extra output/sub_auto2_clean/matching_results.tsv --output output/sub_auto2_frsafe/matching_results.tsv
+uv run python scripts/france_conflicts.py --base output/sub_auto2_frsafe/matching_results.tsv --output output/fr_conflicts/matching_results.tsv
+uv run python scripts/france_union.py --base output/fr_conflicts/matching_results.tsv --scores output/blend_auto2/test_scored.parquet \
+    --output output/fr_final/matching_results.tsv
+
+# 9. US/India and the final file: 10-fold CV blend of every cross-encoder with the context features, full blend,
+#    segment calibration and decoding, composition rescoring with the same context, France rows from step 8.
+./scripts/final_assemble.sh final output/fr_final/matching_results.tsv   # output/final_final/*.tsv
+cp output/final_final/matching_results.tsv output/final_final/candidate_pairs.tsv output/
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
     --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids
@@ -110,10 +129,18 @@ README explains the file names and the `si`/`ti` row conventions.
   ("Lille Ecole SARL" exists many times), falls in this group automatically.
 - **Decoding**: each target goes to at most one Source 1 entity, then the candidate prefix with the highest expected
   F0.5 is chosen (an empty list included).
-- **Generator-aware rules for countries without labels** (`amzn.france_rule`, `amzn.gen_features`): restore
-  acronyms, web domains, aliases and near-typos at the Source 1 address; drop house-number conflicts that are not
-  typos and one-word swaps to another common vocabulary word (true only about 23% of the time in France). Each rule
-  rests on a training-label statistic and is applied only where the model has no labels.
+- **Generator-aware rules for countries without labels** (`amzn.france_rule`, `amzn.gen_features`,
+  `scripts/france_conflicts.py`, `scripts/france_union.py`): restore acronyms, web domains, aliases and near-typos at
+  the Source 1 address; drop one-word swaps to another common vocabulary word (true only about 23% of the time in
+  France); drop nearby house-number conflicts whose name adds words (the decoy signature, 3% true in training) and
+  restore identical-name records whose number moved more than 30 away (99.7% true beyond 50); add pairs the
+  six-model cross-encoder blend scores above 0.98 on unclaimed targets (99.9-100% true in training), except the
+  decoy-heavy classes. Each rule rests on a training-label statistic and is applied only where the model has no
+  labels.
+- **Full-competition target context** (`scripts/ctx_features.py`, `scripts/compose.py --extra`): the pair's
+  stage-1 score renormalized over every candidate entity of the target, their number, the best competitor and raw
+  name agreement, used by the blend and by the composition rescoring of ambiguous pairs (10-fold CV F0.5
+  0.99167 -> 0.99270 for US/India).
 - **Label shift**: the test set holds about twice as many look-alike decoy records per entity as the training data,
   concentrated at nearby house numbers. Per country, house relation (equal, conflict, unknown) and score bin, holdout
   positives per entity are kept and extra test pairs count as negatives; the corrected posterior replaces the raw
