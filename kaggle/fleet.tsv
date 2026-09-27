@@ -24,3 +24,5 @@ default	aceofstades/amzn-ce-train-7	ce_score_7	xlmr7	XLM-R large, hard pairs see
 .config/kaggle/yash	techno0/amzn-ce-train-38	ce_score_38	e5i38	e5-large-instruct, kNN pairs seed 21 (5 h)
 .config/kaggle/vishal	vishalbarai/amzn-ce-train-39	ce_score_39	xlmr39	XLM-R large, kNN pairs (base export) (4.5 h)
 .config/kaggle/vishal	vishalbarai/amzn-ce-train-40	ce_score_40	bgem3_40	bge-m3, kNN pairs seed 31 (4.5 h)
+.config/kaggle/yug	yugchapherkar/amzn-ce-train-41	ce_score_41	e5i41	e5-large-instruct, kNN pairs (base export) (4 h)
+.config/kaggle/yug	yugchapherkar/amzn-ce-train-42	ce_score_42	bgem3_42	bge-m3, kNN pairs (base export) (4 h)

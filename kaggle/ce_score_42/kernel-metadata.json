@@ -1,0 +1,17 @@
+{
+  "id": "yugchapherkar/amzn-ce-score-42",
+  "title": "amzn-ce-score-42",
+  "code_file": "ce_score.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "aceofstades/amzn-er-data"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "yugchapherkar/amzn-ce-train-42"
+  ]
+}
