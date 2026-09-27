@@ -477,3 +477,12 @@ df -h / ; du -sh output/* | sort -h | tail                  # disk
   keep it only if its CV beats ctxA (0.99261 blend CV), stage it, then build the deliverable zip with `amzn.package`.
 - A stale `scripts/noon_build.sh` (from an earlier session) fired at noon and would have staged a file with the old
   France; it was stopped and `logs/noon_fleetA.done` marks it finished.
+
+## Status update (2026-09-27 17:50 IST)
+
+- Leaderboard: file 13 **0.989261** (best, rank 55; context blend + context composition for US/India, file 11's
+  France), file 14 0.989208 (France band 0.9-0.98 + owner picks: ~64% true, rejected). Two submissions left.
+- `output/to_submit/15_FINAL_same_as_file13_best_matching_results.tsv` = file 13; re-submit it last if the leaderboard
+  ranks the most recent submission. `output/claudes_plan_submission.zip` is the deliverable built from it.
+- Everything else tested flat or negative (see docs/experiments.md, closing checks). Kaggle kernels 31-42 keep
+  landing into cache/ce_*, but the ensemble is saturated (23 -> 25 models: CV flat).
