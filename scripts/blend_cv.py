@@ -47,12 +47,14 @@ def main() -> None:
     parser.add_argument("--extras", default="name,full,gen")
     parser.add_argument("--extra-ce", action="append", default=[])
     parser.add_argument("--depth", type=int, default=6)
+    parser.add_argument("--eta", type=float, default=0.1)
     parser.add_argument("--tag", required=True)
     args = parser.parse_args()
     extras = {e for e in args.extras.split(",") if e}
     extra_ce = tuple((item.split("=", 1)[0], Path(item.split("=", 1)[1])) for item in args.extra_ce)
     features = (B.BASE + (B.NAME if "name" in extras else []) + (B.GEN if "gen" in extras else [])
-                + (B.CTX if "ctx" in extras else []) + [f"{name}_logit" for name, _ in extra_ce])
+                + (B.CTX if "ctx" in extras else []) + (B.CTX2 if "ctx2" in extras else [])
+                + [f"{name}_logit" for name, _ in extra_ce])
     s_ids, _ = id_frames(args.embed_dir, "train")
     buckets = duckdb.sql("SELECT si, (hash(entity_id) % 1000)::INT AS bucket FROM s_ids").pl().with_columns(pl.col("si").cast(pl.UInt32))
     keep = buckets.filter(pl.col("bucket") < 100).select("si")
@@ -62,7 +64,7 @@ def main() -> None:
     has = train["ce_logit"].is_not_null()
     out = train.select("si", "ti", "label", "bucket", "p1").with_columns(pl.col("p1").alias("p2"))
     p2 = out["p2"].to_numpy().copy()
-    params = {"objective": "binary:logistic", "eval_metric": "logloss", "max_depth": args.depth, "eta": 0.1,
+    params = {"objective": "binary:logistic", "eval_metric": "logloss", "max_depth": args.depth, "eta": args.eta,
               "tree_method": "hist", "seed": 3}
     fold = (train["bucket"] // 10).to_numpy()
     X = train.select(features).to_numpy()
@@ -74,7 +76,7 @@ def main() -> None:
         fit = mask & (fold != k)
         dfit = xgb.DMatrix(X[fit], label=y[fit], feature_names=features)
         dvalid = xgb.DMatrix(X[valid], label=y[valid], feature_names=features)
-        model = xgb.train(params, dfit, num_boost_round=1000, evals=[(dvalid, "valid")], early_stopping_rounds=30,
+        model = xgb.train(params, dfit, num_boost_round=3000, evals=[(dvalid, "valid")], early_stopping_rounds=30,
                           verbose_eval=False)
         p2[valid] = model.predict(dvalid, iteration_range=(0, model.best_iteration + 1))
         losses.append(model.best_score)

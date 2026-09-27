@@ -30,6 +30,7 @@ NAME = ["s_name_dup", "t_name_dup", "s_name_in_targets", "name_idf_cos", "name_i
 # Full-competition target context (scripts/ctx_features.py): stage-1 score over the sum for all candidate entities of
 # the target, their number, the best competitor, raw name token-set agreement and how many candidates share it.
 CTX = ["q1", "m1", "top_other1", "s_tok_eq", "n_s_tok_eq"]
+CTX2 = ["rank1", "q1sq", "m1_05", "k_core"]
 
 
 FEATURES = BASE
@@ -80,6 +81,9 @@ def load(model_dir: Path, ce_dir: Path, split: str, extras: set[str], cache_dir:
     if "ctx" in extras:
         ctx = pl.read_parquet(cache_dir / "ctx" / f"{split}.parquet")
         frame = frame.join(ctx, on=["si", "ti"], how="left")
+    if "ctx2" in extras:
+        ctx2 = pl.read_parquet(cache_dir / "ctx2" / f"{split}.parquet")
+        frame = frame.join(ctx2, on=["si", "ti"], how="left")
     if "tt" in extras:
         tt = pl.read_parquet(cache_dir / "tt" / f"{split}_aggregates.parquet").with_columns(
             pl.col("si").cast(pl.UInt32), pl.col("ti").cast(pl.UInt32))
@@ -136,7 +140,8 @@ def main() -> None:
     global FEATURES
     FEATURES = (BASE + (HOUSE if "house" in extras else []) + (TT if "tt" in extras else [])
                 + (NAME if "name" in extras else []) + (GEN if "gen" in extras else [])
-                + (CTX if "ctx" in extras else []) + (["logit_p1b"] if args.second_model_dir else []))
+                + (CTX if "ctx" in extras else []) + (CTX2 if "ctx2" in extras else [])
+                + (["logit_p1b"] if args.second_model_dir else []))
     extra_ce = tuple((item.split("=", 1)[0], Path(item.split("=", 1)[1])) for item in args.extra_ce)
     FEATURES += [f"{name}_logit" for name, _ in extra_ce]
     args.output_dir.mkdir(parents=True, exist_ok=True)

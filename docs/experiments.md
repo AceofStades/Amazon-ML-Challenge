@@ -668,3 +668,35 @@ An owner model (renormalized candidate scores, raw-name agreement, entity compos
 US/India assignments.
 
 22-model blend: 10-fold CV F0.5 0.99167 vs 0.99129 for the 6-model blend, better in all ten folds.
+
+## Full-competition target context (2026-09-27 midday)
+
+The cross-validated blend and composition only see the 220k cross-validated entities, so competition for a target is
+understated there. Stage-1 scores exist for every candidate entity of every target (all 2.2M training entities,
+out-of-fold), so a target's full competition can be summarized the same way on training and test:
+q1 = the pair's stage-1 score over the sum for all candidate entities of the target (p1 >= 0.01), m1 = their number,
+the best competitor's score, raw name token-set agreement, and how many candidates share it
+(`scripts/ctx_features.py`, `compose.extra_features`).
+
+| Change (US/India, 10-fold CV over 220k entities) | CV F0.5 | Test-like view* |
+|---|---|---|
+| 22-model blend | 0.99167 | 0.99269 |
+| + composition (previous features) | 0.99190 | 0.99283 |
+| + composition with target context | 0.99260 | 0.99318 |
+| context blend (23 models, context as pairwise inputs) | 0.99261 | 0.99314 |
+| context blend + composition with target context | 0.99270 | 0.99327 |
+
+*Test-like view: targets whose true owner is a training entity outside the cross-validated set are removed (in test
+the owner is present; in CV every claim on them is a false positive), which removes a CV-only artefact.
+
+Train/test shift of the context features is small within strata (address-less or not, stage-1 band); test has
+slightly higher q1 because its Source 1 set is smaller (1.73M vs 2.2M entities). Tried without gain: raw-name
+agreement with the entity's confident records, a second composition pass, a wider or deeper composition model, a
+second context set (rank, sharper renormalization, name-core frequency), blend depth 8, blend eta 0.05, and the
+address-less owner model on top (only ~60% precise once composition has the context).
+France stays on file 11's decisions: a 6-model context blend becomes sure of 4.6k common-word swaps and 2.1k made-up
+brands in France, the two classes that are mostly decoys there.
+
+Remaining US/India loss in the test-like view (0.0068): address-less records whose name several entities share
+(0.0053), addressed records with made-up brand names or identical names a few doors away (0.0011), false links
+(0.0004).
