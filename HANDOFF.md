@@ -486,3 +486,16 @@ df -h / ; du -sh output/* | sort -h | tail                  # disk
   ranks the most recent submission. `output/claudes_plan_submission.zip` is the deliverable built from it.
 - Everything else tested flat or negative (see docs/experiments.md, closing checks). Kaggle kernels 31-42 keep
   landing into cache/ce_*, but the ensemble is saturated (23 -> 25 models: CV flat).
+
+## Status update (2026-09-27 18:40 IST)
+
+- Two submissions left. Best is still file 13 (0.989261). `output/to_submit/15_FINAL_same_as_file13_best_matching_results.tsv`
+  is staged as the safe final.
+- `scripts/fleet_final.sh fleetZ 20:45` runs detached: when Kaggle scorings 31-34 have landed (xlmr31, bge32 and
+  bgem3_34 are in; e5i33 was still scoring at 18:30) or at 20:45, it runs `final_assemble.sh fleetZ` with file 11's
+  France and prints the blend CV, the composition CV and the test-like view to `logs/fleet_final_fleetZ.log`.
+  Compare with ctxA (blend CV 0.99261, test-like 0.99314, with composition 0.99327). Stage it only if it is better.
+- Kernels 35-42 are still training; they land too late for another careful rebuild and the ensemble is saturated.
+- Evening audits (docs/experiments.md, last two sections) found no France or US/India pool large enough to matter.
+  The leaderboard implies France F0.5 of about 0.96-0.975, below what its missing links explain, but no structural
+  check located the extra France errors.
