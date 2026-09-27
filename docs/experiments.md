@@ -737,3 +737,28 @@ is sure of were ~100% true; the next band is a coin flip). Other closing checks,
   vs 0.99261 (test-like 0.99313 vs 0.99314), no gain. Relaxed France calibration (odds x2) + rules: rejected.
 - France accepts where both stage 1 and the blend are sceptical: 288 pairs; no removal pool.
 Best leaderboard score: file 13, 0.989261.
+
+## Evening audits: word-level name changes and repeated records (2026-09-27 18:00-18:30)
+
+Looking for a France or US/India pool of wrong decisions large enough to matter (about 10k pairs). None found; the
+submission's decisions match the training structure class by class.
+- **Same-house "related company" suffixes are decoys in training** (`scripts/train_addword_audit.py`): at the Source 1
+  house, a target that adds or swaps in group, holdings, enterprises, industries, ventures, infratech, overseas or
+  exports is 0% true (about 3.4k pairs each in same/add), as are India's public/private legal-form changes.
+  The US/India test submission accepts none of them (`scripts/usin_addword_accept.py`; test has 2.6 times more per
+  entity).
+- **France's analogue is a different vocabulary** (`scripts/fr_adddrop_audit.py`): France near-house added-word
+  decoys use seven suffixes uniformly (developpement, groupe, international, holding, distribution, participations,
+  france: about 20k each) plus the legal forms and SNC. At the Source 1 house, international/holding/distribution/
+  participations appear about 50 times each (0.25% of their nearby count), while groupe and developpement appear
+  1.3k (add) and 4k (swap) times each, as often as the fillers cie, et fils, associes, services. So same-house
+  groupe/developpement are mostly true filler noise (about 96%), and the 22-model blend's low scores for them
+  (median p2 0.002-0.007, learned from the US "group" decoys) do not transfer. They stay accepted.
+- **Repeated records** (`scripts/dup_group_audit.py`): in training, a target whose normalized name and address occur
+  twice or more in Sources 2/3 is almost always true even in decoy-like classes (house conflict with added words:
+  98.8% true against 13.3% for single records; swapped words 91% against 19%), because decoys are single records.
+  France has 14-18 times more such repeated targets in the conflict classes, but 5,071 of 5,088 are held by another
+  entity with the same generic name at the target's own address (`scripts/dup_free.py`), so there is nothing to add.
+- The US/India class shares that looked low against training (same-house added words 77% accepted vs 91% true in
+  training) are explained by the decoy suffixes above (0% accepted, 14.7% of the class in test vs 5.9% in training)
+  and by the country mix (llp and limited are India-only: per India entity their accepted rates match training).
