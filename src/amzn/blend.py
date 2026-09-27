@@ -31,6 +31,7 @@ NAME = ["s_name_dup", "t_name_dup", "s_name_in_targets", "name_idf_cos", "name_i
 # the target, their number, the best competitor, raw name token-set agreement and how many candidates share it.
 CTX = ["q1", "m1", "top_other1", "s_tok_eq", "n_s_tok_eq"]
 CTX2 = ["rank1", "q1sq", "m1_05", "k_core"]
+ECTX = ["e_q1", "e_m05", "e_rank1", "e_top_other"]
 
 
 FEATURES = BASE
@@ -81,6 +82,8 @@ def load(model_dir: Path, ce_dir: Path, split: str, extras: set[str], cache_dir:
     if "ctx" in extras:
         ctx = pl.read_parquet(cache_dir / "ctx" / f"{split}.parquet")
         frame = frame.join(ctx, on=["si", "ti"], how="left")
+    if "ectx" in extras:
+        frame = frame.join(pl.read_parquet(cache_dir / "ectx" / f"{split}.parquet"), on=["si", "ti"], how="left")
     if "ctx2" in extras:
         ctx2 = pl.read_parquet(cache_dir / "ctx2" / f"{split}.parquet")
         frame = frame.join(ctx2, on=["si", "ti"], how="left")
@@ -141,7 +144,7 @@ def main() -> None:
     FEATURES = (BASE + (HOUSE if "house" in extras else []) + (TT if "tt" in extras else [])
                 + (NAME if "name" in extras else []) + (GEN if "gen" in extras else [])
                 + (CTX if "ctx" in extras else []) + (CTX2 if "ctx2" in extras else [])
-                + (["logit_p1b"] if args.second_model_dir else []))
+                + (ECTX if "ectx" in extras else []) + (["logit_p1b"] if args.second_model_dir else []))
     extra_ce = tuple((item.split("=", 1)[0], Path(item.split("=", 1)[1])) for item in args.extra_ce)
     FEATURES += [f"{name}_logit" for name, _ in extra_ce]
     args.output_dir.mkdir(parents=True, exist_ok=True)

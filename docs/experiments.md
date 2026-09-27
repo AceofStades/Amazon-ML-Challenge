@@ -719,3 +719,21 @@ Final file (`scripts/final_night.sh`): US/India from a rebuild with every landed
 CV is not below the 23-model context blend), France = file 13's France plus pairs the six-model blend scores
 0.9-0.98 on unclaimed targets (swaps, brands and nearby added-word conflicts excluded; 2,894) and the address-less
 owner-model picks (819).
+
+## Leaderboard: France frontier test (file 14) and closing checks (2026-09-27 evening)
+
+File 14 = file 13 + France pairs the six-model blend scores 0.9-0.98 on unclaimed targets (2,894; no swaps, brands or
+nearby added-word conflicts) + 819 address-less owner-model picks: **0.989208** (-0.00005 vs file 13). The additions
+were about 64% true, below the ~75% break-even, so France is saturated beyond file 11's decisions (the pairs the blend
+is sure of were ~100% true; the next band is a coin flip). Other closing checks, none usable:
+- France same-name same-house same-street pairs: 99.8% accepted (520,061 of 520,992); low-address-similarity
+  same-house pairs are genuinely different streets.
+- France candidate lists (bi-encoder top 40) are saturated by generic names (0.49% of accepted France links at ranks
+  36-40 vs 0.01% US); a deeper search adds ~1.3k clean same-house pairs, the rest are ambiguous address-less records
+  and nearby decoys. Training candidate misses (0.25% of links) are also mostly address-less shared names.
+- Same-house "drop a type word, add a filler" France pairs (cie, groupe, developpement, associes, fils, services,
+  france) mirror the US filler swaps (98.7% true); common type words (club, amicale, ecole...) are the decoys.
+- Entity-side context in the blend (share of the entity's stage-1 mass, strong-candidate count, rank): CV 0.99259
+  vs 0.99261 (test-like 0.99313 vs 0.99314), no gain. Relaxed France calibration (odds x2) + rules: rejected.
+- France accepts where both stage 1 and the blend are sceptical: 288 pairs; no removal pool.
+Best leaderboard score: file 13, 0.989261.

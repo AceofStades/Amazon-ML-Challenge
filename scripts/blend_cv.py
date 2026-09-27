@@ -53,7 +53,7 @@ def main() -> None:
     extras = {e for e in args.extras.split(",") if e}
     extra_ce = tuple((item.split("=", 1)[0], Path(item.split("=", 1)[1])) for item in args.extra_ce)
     features = (B.BASE + (B.NAME if "name" in extras else []) + (B.GEN if "gen" in extras else [])
-                + (B.CTX if "ctx" in extras else []) + (B.CTX2 if "ctx2" in extras else [])
+                + (B.CTX if "ctx" in extras else []) + (B.CTX2 if "ctx2" in extras else []) + (B.ECTX if "ectx" in extras else [])
                 + [f"{name}_logit" for name, _ in extra_ce])
     s_ids, _ = id_frames(args.embed_dir, "train")
     buckets = duckdb.sql("SELECT si, (hash(entity_id) % 1000)::INT AS bucket FROM s_ids").pl().with_columns(pl.col("si").cast(pl.UInt32))
