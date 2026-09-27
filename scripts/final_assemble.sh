@@ -12,6 +12,7 @@ flock 9
 NAME=${1:?name}
 FRANCE=${2:-output/sub_auto2_frsafe/matching_results.tsv}
 PY=.venv/bin/python
+EXTRAS=${EXTRAS:-name,full,gen,ctx}
 EXTRA=""
 for dir in cache/ce_*; do
     name=${dir#cache/ce_}
@@ -20,8 +21,8 @@ for dir in cache/ce_*; do
     fi
 done
 echo "cross-encoders:$EXTRA"
-PYTHONPATH=src $PY scripts/blend_cv.py $EXTRA --tag $NAME
-$PY -m amzn.blend --model-dir output/v7 --extras name,full,gen $EXTRA --depth 6 --output-dir output/blend_$NAME
+PYTHONPATH=src $PY scripts/blend_cv.py $EXTRA --extras $EXTRAS --tag $NAME
+$PY -m amzn.blend --model-dir output/v7 --extras $EXTRAS $EXTRA --depth 6 --output-dir output/blend_$NAME
 $PY -m amzn.hybrid --blend-dir output/blend_$NAME --output-dir output/hybrid_$NAME
 mkdir -p output/compose_$NAME output/final_$NAME
 $PY scripts/compose.py test --cv-scores output/cv_$NAME.parquet --test-calibrated output/hybrid_$NAME/test_calibrated.parquet \
