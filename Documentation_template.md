@@ -97,14 +97,24 @@ gets the fold average.
 **Cross-encoders** (`crossenc.py`, `kaggle/`): pair classifiers (mean-pooled encoder, linear head) fine-tuned on
 training entities from buckets >= 100, so the blend's training and holdout entities are unseen. Backbones:
 `intfloat/multilingual-e5-small` (three seeds) and `multilingual-e5-base` on a local GPU;
-`intfloat/multilingual-e5-large`, `BAAI/bge-reranker-v2-m3` and `FacebookAI/xlm-roberta-large` on Kaggle
-2x T4 notebooks (DDP, fp16, frozen word embeddings). Training pairs are either encoder neighbours plus all true
-links, or "hard pairs": every stage-1 candidate with p >= 0.01 plus two neighbours and the true links, which is the
-region where the blend uses cross-encoder scores. They rescore every pair with stage-1 p >= 0.01 (8.4M test pairs).
+`intfloat/multilingual-e5-large`, `intfloat/multilingual-e5-large-instruct`, `BAAI/bge-reranker-v2-m3`,
+`BAAI/bge-m3`, `sentence-transformers/LaBSE` and `FacebookAI/xlm-roberta-large` on Kaggle 2x T4 notebooks (DDP,
+fp16, frozen word embeddings), 22 models in total. Training pairs are encoder neighbours plus all true links,
+"hard pairs" (every stage-1 candidate with p >= 0.01 plus two neighbours and the true links, the region where the
+blend uses cross-encoder scores) or "boundary pairs" (0.02 <= p < 0.98). They rescore every pair with stage-1
+p >= 0.01 (8.8M test pairs).
 
-**Pairwise blend:** XGBoost (depth 6) over logit(stage-1 p), every cross-encoder logit, the 67 stage-1 features and
-name-genericness inputs. It is fitted on out-of-fold training pairs of buckets 0-99; holdout logloss on rescored
-pairs is 0.044 (stage 1 alone: 0.073).
+**Pairwise blend:** XGBoost (depth 6) over logit(stage-1 p), every cross-encoder logit, the 67 stage-1 features,
+name-genericness inputs and generator-aware name-change descriptors (exact, added/dropped words, typo, word swap
+by vocabulary class, acronym, domain, alias, made-up brand; `gen_features.py`). It is fitted on out-of-fold training
+pairs of buckets 0-99. Ten-fold cross-validation over 220k entities (each fold of ten buckets predicted by a blend
+fitted on the other ninety) gives macro F0.5 0.99167 with all 22 cross-encoders against 0.99129 with six, better in
+every fold.
+
+**Composition rescoring** (`scripts/compose.py`): ambiguous pairs (0.01 <= p < 0.99) are rescored with features of
+the entity's confident matches: counts per source, records without an address, noise-kind counts (at most one
+alias, rarely two acronyms or domains), how well the extra record fits the training composition, and competing
+claims on the target. Cross-validated F0.5 +0.0002; applied to labelled countries.
 
 **Why no entity-context stage:** a second XGBoost stage with entity context was tried. Its inputs were rank and
 sums of scores per entity, sibling support, the strongest competing Source 1 claim per target, and house-number
@@ -130,8 +140,17 @@ labels:
   carry a Source 1 word or the initials, DBA/"formerly" aliases, near-typos and the Source 1 name plus extra words.
   In training such same-address pairs are 94-99.9% true; stage 1 scores the short French acronyms low (median 0.35)
   because the same acronym recurs across many targets.
-- *Drop house-number conflicts that are not typos:* a typo keeps the number up to leading zeros, one changed digit
-  or one dropped digit; France's accepted conflicts are unrelated numbers, the decoy signature.
+- *House-number conflicts by name change* (`scripts/france_conflicts.py`): in training, decoys "a few doors away"
+  always change the name (same street, conflicting number, target adds words within 50 numbers: 3% true), while
+  true records whose number was moved keep the name (identical names after folding accents, case and dotted
+  letters: 99.7% true beyond 50 numbers). France's decoys add a legal form, "SNC", "Groupe" or "Développement" and
+  sit within 30 numbers, and almost never at the Source 1 house (SNC: 23 same-house pairs against 9,876 nearby).
+  The rule drops nearby added-word conflicts and restores identical-name records more than 30 numbers away.
+- *Confident cross-encoder pairs* (`scripts/france_union.py`): out-of-fold blend scores above 0.98 are 99.9-100%
+  true in every house-relation and name-change class. For the unlabelled country the pipeline adds such pairs on
+  targets no entity holds, excluding the decoy-heavy classes (common-word swaps, made-up brands, nearby added-word
+  conflicts). The six-model blend is used here: several newer cross-encoders score French pairs systematically
+  higher than US/Indian ones, which the leaderboard confirmed.
 - *Drop common-word swaps:* a record whose name replaces one Source 1 word by another common vocabulary word (not a
   filler such as "services", not a typo or abbreviation). In training, same-address swaps to a common word are true
   45% of the time, against 96-99% for fillers and garbled typos. France's swaps use exactly the words of its decoys
@@ -149,6 +168,13 @@ the encoder, the cross-encoders or the matchers. `docs/experiments.md` lists eve
 | + test prior-shift correction | 0.983 | 0.968 |
 | Stage 1 + two small cross-encoders, per-country scorer, address-wide house features | 0.990 | 0.9848 |
 | + third small and first large cross-encoder, one winner per target | 0.991 | 0.9853 |
+| + generator-pattern rules for France (restores, conflict and swap drops, initials) | 0.991 | 0.9872 |
+| + generator-aware features and e5-base cross-encoder | 0.992 | 0.9874 |
+| + composition rescoring, France safe-class additions | 0.992 | 0.9876 |
+| + France house-conflict rule and confident cross-encoder pairs | 0.992 | 0.9884 |
+
+The holdout column counts links inside the candidate sets; the full holdout value is about 0.001 lower (candidate
+recall 0.997), which matches the US/India part of the leaderboard.
 
 **Distribution shift.** The confident pairs per entity (p >= 0.99) are the same on holdout and test. Mid-range pairs
 are 2-5 times more frequent on test, almost entirely where the house numbers conflict. Inspection shows decoy
@@ -172,7 +198,12 @@ cross-encoder blend would remove only true links (precision 0.99-1.00), so they 
 cross-encoders already separate typos from decoys when labels exist.
 
 **Remaining errors.** On the holdout, most missed links are records without an address whose name is shared by
-several Source 1 entities, which is ambiguous even to a human. On the test set, the largest remaining uncertainty is
+several Source 1 entities, which is ambiguous even to a human. In training 97.7% of address-less records are true
+links, but the owner is only weakly identifiable: token-set agreement with the owner's name holds for 60% of owners
+against 29% of other same-name entities, and shared noise tokens with the owner's other records for 17% against 8%
+(the generator adds noise per record; row order and ids carry no signal). An owner model
+(`scripts/noaddr_owner.py`: candidate scores renormalized over the target's candidates, raw-name agreement, entity
+composition) is 96% precise at probability 0.9 on held-out ambiguous targets and assigns 3,083 US/India records. On the test set, the largest remaining uncertainty is
 France, where generic names leave the address as the only strong signal.
 
 ## 6. Reproduction and Fair Play
@@ -183,5 +214,5 @@ encoder and the XGBoost models, both output TSVs and this document. Raw challeng
 
 Only the supplied TSVs are used. No external business database, API, geocoder or data augmentation. The pretrained
 weights are general multilingual text encoders and rerankers under the MIT or Apache-2.0 license
-(`multilingual-e5-small/base/large`, `bge-reranker-v2-m3`, `xlm-roberta-large`; at most 568M parameters each, far
-below 8B).
+(`multilingual-e5-small/base/large/large-instruct`, `bge-reranker-v2-m3`, `bge-m3`, `LaBSE`, `xlm-roberta-large`;
+at most 568M parameters each, far below 8B).
