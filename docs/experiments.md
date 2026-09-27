@@ -835,3 +835,27 @@ no-added-word groups, so France's typo-like number changes are chance collisions
 
 File 17 (29-model context blend for US/India, file 11's France with address-less links from the context composition
 model; `scripts/france_noaddr_compose.py`) scored **0.98927**, the new best (file 13: 0.989261). One upload is left.
+
+## Fresh-eyes review by a helper agent (2026-09-27 20:15-21:00)
+
+A helper with no session context re-checked the scoring assumptions and tested new angles; nothing raises the score.
+- Format and scoring: only matching_results.tsv is scored (candidate_pairs.tsv only triggers a subset warning); file 13
+  and file 17 are clean (1,732,544 rows, no duplicate targets, valid ids). Every training target has exactly one owner,
+  so the one-winner rule is right.
+- Duplicate records (`scripts/agent_dup_consistency.py`): addressed copies (same name and address) share an owner in
+  99.99% of training groups and our file is consistent (about 75 unassigned copies and 9 split groups, at most
+  +0.00001). Address-less copies with the same name usually belong to different entities, so no propagation rule.
+- Source 2/3 balance test (`scripts/agent_source_balance.py`): when an entity's other links are all in one source, a
+  true link sits in the other source 74% of the time and a decoy 50% (validated on training; aliases are an exception).
+  US/India accepted links match training in every class. France accepted links show 0.713 vs 0.734, spread over every
+  class and matching France's excess of one-source three-link entities (missed links, not a removable class).
+  Estimated true shares: France legal-form additions/drops (including the ~27k the blend rejects) 0.97-0.99, filler swaps
+  0.94, one-word drops 0.77-0.80 (break-even); unassigned same-house brands about 0.4 (the 5.1k with blend >= 0.95 about
+  0.8 +/- 0.07, worth at most +0.0001), address-less candidates about 0.41 each, house conflicts 0.
+- Address-less owner rules: giving a record to the only candidate without another address-less record is 42% precise
+  (top score 60-69%); composition scores are calibrated in CV, so no threshold gain. True links below stage-1 0.01:
+  0.1% addressed, 0.38% address-less.
+- Target competition: only 49 France targets are held by an entity with a worse address while a same-house near-exact
+  alternative exists.
+Conclusion: no pool of 5k+ links clears the ~0.73 break-even; reaching 0.990 would need about 20k links at >= 90%
+precision. The France loss is spread thin, mostly in the address-less owner choice.
