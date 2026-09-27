@@ -631,3 +631,40 @@ house conflicts, country scope and the common-swap guard. They pass with
 `env POLARS_MAX_THREADS=2 PYTHONPATH=src .venv/bin/python -m unittest src.tests.test_france_house_numbers`.
 The noon assembly still merges the saved France baseline; this correction
 does not silently change that first submission.
+
+## Leaderboard: composition, France decoy structure and the blend union (2026-09-27)
+
+| File | Change | Leaderboard |
+|---|---|---|
+| 10 | auto2 blend + composition rescoring (US/India) + France safe-class additions | 0.987648 |
+| 11 | 10 + France house-conflict rule + France blend union (6-model blend, p2 > 0.98) | 0.988413 (rank 50) |
+| 12 | 11 + 22-model blend (US/India) + France pairs with 22-model p2 > 0.9 including same-house swaps | 0.987802 |
+
+France decoy structure (training truth, same street, similar names, house numbers differ):
+- Decoys "a few doors away" change the name: targets that add words within 30 numbers are 2.7-2.9% true. In France
+  the added words are legal forms, SNC, "Groupe" and "Developpement" (v7 normalization hides the last two, so these
+  decoys looked like exact names). Added-word decoys almost never sit at the Source 1 house (SNC: 23 same-house pairs
+  against 9,876 nearby).
+- True records whose house number was moved keep the name: identical raw names (accents, case, dotted letters folded)
+  are 99.7% true more than 50 numbers away and 91% within 50. France decoys lie within 30 numbers, so France restores
+  identical names beyond 30 (scripts/france_conflicts.py: drops 1,118 added-word decoys, restores 2,960).
+- Blend union (scripts/france_union.py): out-of-fold blend scores above 0.98 are 99.9-100% true in every class, and the
+  France scorer (stage 1) had rejected many of them. File 11 added 8,853 such pairs; the +0.00077 gain of file 11
+  means nearly all added pairs were true, so France errors were mostly missed links.
+- Same-house common-word swaps are not safe even when the blend is sure: file 12 added ~7k of them (plus pairs from the
+  22-model blend) and lost 0.0006, i.e. the additions were ~25% true, matching the earlier ~23% estimate for France
+  swaps. Several new cross-encoders score France pairs systematically higher than US/India (bge25 +1.9 logits, hard
+  e5-base +1.6, reference large model +0.7; scripts/ce_sanity.py), so the 22-model blend is not used for France.
+
+Per-entity link budget (scripts/link_budget.py): US/India submissions match the training truth category by category
+(3.39 accepted vs 3.46 true per entity); the gap is address-less targets. France accepts 3.28 per entity after file 11.
+
+Address-less targets (scripts/noaddr_*.py): 97.7% are true links in training and their per-entity count is the same
+in test, but test leaves 111k unassigned (US 40k, India 48k, France 23.5k). The owner is ambiguous among same-name
+entities: raw token-set agreement with the owner's Source 1 name (60% vs 29% for other candidates), shared noise
+tokens with the owner's other records (16.6% vs 7.8%; the generator adds noise per record) and composition are weak.
+An owner model (renormalized candidate scores, raw-name agreement, entity composition; scripts/noaddr_owner.py) is
+96% precise at probability >= 0.9 on held-out ambiguous training targets but covers only ~12% of them; it adds 3,083
+US/India assignments.
+
+22-model blend: 10-fold CV F0.5 0.99167 vs 0.99129 for the 6-model blend, better in all ten folds.
