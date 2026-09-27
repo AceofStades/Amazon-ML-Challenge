@@ -790,3 +790,11 @@ Structural checks found no pool of that size (tens of thousands of pairs):
 - **Composition of accepted links** (Source 2 vs 3 split, one-link entities, empty entities): France shows fewer
   links per entity than training truth (more one- and two-link entities), with no class over-represented.
 - **Near-duplicate Source 1 entities**: 87 in France, none elsewhere.
+
+## Fleet rebuild with 29 cross-encoders (file 16, 2026-09-27 19:06)
+
+`scripts/fleet_final.sh fleetZ` (same pipeline as file 13, plus xlmr31, bge32, e5i33 and bgem3_34 from Kaggle):
+blend CV 0.99264 (file 13's 25-model context blend: 0.99261), test-like view 0.99317 (0.99314), after context
+composition 0.99327 for both. The file changes 3.4k+/1.0k- US links (1.1k made-up brands and 1.4k exact names added)
+and 0.8k+/1.5k- India links; France is file 13's. Staged as file 16 (`output/final_fleetZ`); expected about equal to
+file 13. Kernels 35-42 were still training at 19:00.
