@@ -459,3 +459,21 @@ df -h / ; du -sh output/* | sort -h | tail                  # disk
 - The session transcripts are in `.session/` (git-ignored; they contain the hades password, never commit them) and in
   `~/.claude/projects/-home-aceofstades-code-amzn/`, so `claude --resume 0eca6fab-c753-4b4a-872b-124a1ee7098e` works
   when started in `~/code/amzn`.
+
+## Status update (2026-09-27 12:45 IST)
+
+- Submissions left: 2, planned for **17:00** and **23:30**.
+- Staged for 17:00: `output/to_submit/13_file11_france_plus_context_blend_usin_with_extended_composition_matching_results.tsv`
+  (= `output/final_ctxA`): file 11's France + context blend (23 cross-encoders + full-competition target context)
+  + composition with the same context for US/India. CV test-like 0.99327 vs 0.99269 for the plain 22-model blend.
+  Expected about 0.9891-0.9893.
+- `scripts/final_assemble.sh NAME output/final_pre1_frcu/matching_results.tsv` now builds exactly this pipeline
+  (EXTRAS defaults to name,full,gen,ctx; composition uses --extra). Always pass file 11's France file.
+- Before rebuilding on new cross-encoders, recompute nothing: `cache/ctx/{train,test}.parquet` depend only on stage 1.
+- Kaggle: kernels 31-34 (pravinbokade, dipikabokade123) train until about 16:00-18:30, then chains score and download
+  them into `cache/ce_*`. Kernels 35-36 (octopus25) failed: the account has no phone verification (0 GPUs, no
+  internet); re-push them only after the user verifies it.
+- The 23:30 file: rebuild with every landed model (`./scripts/final_assemble.sh fleetZ output/final_pre1_frcu/matching_results.tsv`),
+  keep it only if its CV beats ctxA (0.99261 blend CV), stage it, then build the deliverable zip with `amzn.package`.
+- A stale `scripts/noon_build.sh` (from an earlier session) fired at noon and would have staged a file with the old
+  France; it was stopped and `logs/noon_fleetA.done` marks it finished.
