@@ -88,7 +88,7 @@ p = p.join(own, on="ti", how="left")
 train = p.filter(pl.col("owner_bucket") >= 100)
 m = xgb.train({"objective": "binary:logistic", "max_depth": 6, "eta": 0.1, "subsample": 0.8, "eval_metric": "logloss", "nthread": 12},
               xgb.DMatrix(train.select(feats).to_numpy(), label=train["label"].to_numpy()), 300)
-cv = pl.read_parquet("output/cv_fleetA.parquet", columns=["si", "ti", "label", "p2"])
+cv = pl.read_parquet(sys.argv[1] if len(sys.argv) > 1 else "output/cv_fleetA.parquet").select("si", "ti", "label", pl.col(sys.argv[2] if len(sys.argv) > 2 else "p2").alias("p2"))
 scored = one_to_one(cv.select("si", "ti", "p2"), "p2")
 chosen = decode(scored["si"].to_numpy(), scored["ti"].to_numpy(), scored["p2"].to_numpy(), "expected", 0.05, 0.0)
 picked = pl.DataFrame({"si": np.repeat(np.fromiter(chosen.keys(), np.int64), [len(v) for v in chosen.values()]),
