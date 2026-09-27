@@ -830,3 +830,8 @@ US/India about 0), but pure decoy-word candidates ("Holding", "International") w
 (`scripts/fr_conflict_displacement.py`, `scripts/fr_conflict_control.py`). The house-change type mix (dropped digit
 9-11%, inner digit 2-3%, last digit, unrelated 72%) is identical across decoy-word, legal-form, shared-word, filler and
 no-added-word groups, so France's typo-like number changes are chance collisions of small house numbers. No addition.
+
+## Leaderboard: file 17 (2026-09-27 20:20)
+
+File 17 (29-model context blend for US/India, file 11's France with address-less links from the context composition
+model; `scripts/france_noaddr_compose.py`) scored **0.98927**, the new best (file 13: 0.989261). One upload is left.

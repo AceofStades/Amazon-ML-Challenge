@@ -93,7 +93,16 @@ uv run python scripts/france_union.py --base output/fr_conflicts/matching_result
 # 9. US/India and the final file: 10-fold CV blend of every cross-encoder with the context features, full blend,
 #    segment calibration and decoding, composition rescoring with the same context, France rows from step 8.
 ./scripts/final_assemble.sh final output/fr_final/matching_results.tsv   # output/final_final/*.tsv
-cp output/final_final/matching_results.tsv output/final_final/candidate_pairs.tsv output/
+
+# 10. France links to address-less records from the context composition model (stage-1-only US/India CV,
+#     output/cv_p1only.parquet, from scripts/blend_cv.py on stage-1 scores); every other France decision is unchanged.
+uv run python scripts/france_noaddr_compose.py prepare
+uv run python scripts/compose.py test --cv-scores output/cv_p1only.parquet --test-calibrated cache/fr_p1_as_calibrated.parquet \
+    --countries France --extra --output output/compose_fr_p1/matching_results.tsv
+mkdir -p output/final_frna
+uv run python scripts/france_noaddr_compose.py merge output/final_final/matching_results.tsv output/compose_fr_p1/matching_results.tsv \
+    output/final_frna/matching_results.tsv
+cp output/final_frna/matching_results.tsv output/final_final/candidate_pairs.tsv output/
 
 uv run python src/utils_validate_submission.py --matching output/matching_results.tsv \
     --candidate output/candidate_pairs.tsv --test-dir dataset/test --check-ids

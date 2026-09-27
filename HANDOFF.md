@@ -499,3 +499,10 @@ df -h / ; du -sh output/* | sort -h | tail                  # disk
 - Evening audits (docs/experiments.md, last two sections) found no France or US/India pool large enough to matter.
   The leaderboard implies France F0.5 of about 0.96-0.975, below what its missing links explain, but no structural
   check located the extra France errors.
+
+## Status update (2026-09-27 20:25 IST)
+
+- File 17 scored **0.98927** (new best, file 13 0.989261). The leaderboard keeps each team's best score.
+- One upload left, at 23:30. File 16 (`output/final_fleetZ`) is the fallback; a helper agent is testing new angles
+  and reports by 22:30. The deliverable zip is rebuilt from file 17 (`output/final_fleetZ_frna`); README step 10 and
+  `scripts/france_noaddr_compose.py` reproduce its France step exactly.
