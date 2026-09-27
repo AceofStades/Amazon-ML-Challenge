@@ -700,3 +700,8 @@ brands in France, the two classes that are mostly decoys there.
 Remaining US/India loss in the test-like view (0.0068): address-less records whose name several entities share
 (0.0053), addressed records with made-up brand names or identical names a few doors away (0.0011), false links
 (0.0004).
+
+More checks (13:00-13:40): a 24th cross-encoder (third local e5-base) leaves the context-blend CV unchanged (0.99259
+vs 0.99261), so the ensemble is saturated. Composition with context on a stage-1-only scorer (the kind France uses)
+gains +0.00087 in the test-like US/India view (0.98560 -> 0.98648); not applied to France, where the decoy classes
+differ from the US/India ones the model would learn.
