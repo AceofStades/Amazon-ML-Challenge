@@ -798,3 +798,26 @@ blend CV 0.99264 (file 13's 25-model context blend: 0.99261), test-like view 0.9
 composition 0.99327 for both. The file changes 3.4k+/1.0k- US links (1.1k made-up brands and 1.4k exact names added)
 and 0.8k+/1.5k- India links; France is file 13's. Staged as file 16 (`output/final_fleetZ`); expected about equal to
 file 13. Kernels 35-42 were still training at 19:00.
+
+## Displacement test: label-free check of whole link classes (2026-09-27 20:00-21:40)
+
+True noise replaces one of an entity's records, so entities holding a link of a noise class have fewer other links
+than their peers (after size bias); a decoy is an extra record and leaves the entity's other links unchanged.
+Calibration on training truth (US): entities with a true same-house brand link have 0.29 fewer other links, entities
+with only a decoy brand candidate 0.08 fewer. Test results (`scripts/rejected_class_test.py`, the inline checks in the
+session, `scripts/extra_link_test.py`, `scripts/rejected_class_scan.py`):
+- France links the 29-model blend rejects (p2 < 0.2: 27,080, vs 31 in US and 1 in India) are the same-house
+  French legal-form and suffix additions ("Nantes Sportive" -> "Nantes Sportive SASU", "Kiwanis Jeunes SARL" ->
+  "Kiwanis SARL Developpement"); the blend sees no better owner for 25k of them. Their holders have 0.41 fewer other
+  links, the same as blend-accepted additions (0.41) and domains (0.39): they are true records and the US-trained
+  blend is wrong on French suffixes (it learned "group" = decoy from US data). They stay accepted.
+- France acronym links (18.9k; 7-22 times the US/India rate per entity): holders have 0.34 fewer other links (true);
+  only 2.0% of acronym holders have no other link; chance cannot produce the matches (8 expected of 7.3k). They stay.
+- France rejected same-house made-up brands: holders have only 0.04 fewer links (decoy pattern), so rejecting them
+  is right; accepted France brands show 0.35 (true).
+- No rejected France class shows a deficit beyond the training decoy range.
+Other evening checks: no cross-country links in training; Source 3 share of accepted links is 0.514-0.516 in every
+country; composition restricted to address-less records gains +0.0003 in the US/India stage-1 cross-validation
+(+0.0009 for full composition), and applied to France address-less records it changes -1,060/+1,348 links (file 17).
+Conclusion: France's leaderboard deficit (about 0.012 F0.5 beyond what its missed links explain) is not in any large
+class we can test; it is spread thin or lies in the owner choice among same-name entities.
