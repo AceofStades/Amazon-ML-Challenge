@@ -28,4 +28,17 @@ fi
 ln -f "$src/candidate_pairs.tsv" $out/candidate_pairs.tsv
 $PY src/utils_validate_submission.py -m $out/matching_results.tsv -c $out/candidate_pairs.tsv | tail -1
 echo "US/India from $src; France from $FRANCE"
+blend=output/blend_ctxA
+[ "$src" = "output/final_$NAME" ] && blend="output/blend_$NAME"
+stage="output/to_submit/14_FINAL_context_blend_usin_plus_france_band_and_owner_matching_results.tsv"
+rm -f output/to_submit/14_*
+ln -f $out/matching_results.tsv "$stage"
+cat >> output/to_submit/INDEX.txt <<INDEX
+
+14_FINAL_context_blend_usin_plus_france_band_and_owner_matching_results.tsv  (= $out, built $(TZ=Asia/Kolkata date '+%H:%M'))
+   US/India from $src (CV of the rebuild: ${new:-none}; kept only if >= 0.99255, else the 23-model context blend of file 13).
+   France: file 13's France + six-model-blend pairs scoring 0.9-0.98 on unclaimed targets (no swaps, brands or nearby
+   added-word conflicts) + address-less owner-model picks. File 13 scored 0.989261.
+INDEX
+$PY -m amzn.package --team-name "Claude's Plan" --submission-dir $out --stage1-dir output/v7 --blend-dir "$blend"
 echo "done $out"
