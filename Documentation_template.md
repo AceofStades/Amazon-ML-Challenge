@@ -99,10 +99,10 @@ training entities from buckets >= 100, so the blend's training and holdout entit
 `intfloat/multilingual-e5-small` (three seeds) and `multilingual-e5-base` on a local GPU;
 `intfloat/multilingual-e5-large`, `intfloat/multilingual-e5-large-instruct`, `BAAI/bge-reranker-v2-m3`,
 `BAAI/bge-m3`, `sentence-transformers/LaBSE` and `FacebookAI/xlm-roberta-large` on Kaggle 2x T4 notebooks (DDP,
-fp16, frozen word embeddings), 22 models in total. Training pairs are encoder neighbours plus all true links,
+fp16, frozen word embeddings), 29 models in total. Training pairs are encoder neighbours plus all true links,
 "hard pairs" (every stage-1 candidate with p >= 0.01 plus two neighbours and the true links, the region where the
-blend uses cross-encoder scores) or "boundary pairs" (0.02 <= p < 0.98). They rescore every pair with stage-1
-p >= 0.01 (8.8M test pairs).
+blend uses cross-encoder scores) or "boundary pairs" (0.02 <= p < 0.98). They rescore every pair with
+0.01 <= stage-1 p < 0.995 (3.4M test pairs).
 
 **Pairwise blend:** XGBoost (depth 6) over logit(stage-1 p), every cross-encoder logit, the 67 stage-1 features,
 name-genericness inputs and generator-aware name-change descriptors (exact, added/dropped words, typo, word swap
@@ -116,7 +116,8 @@ cross-validated entities, so competition for a target is understated there. Stag
 entity of every target (out-of-fold on all 2.2M training entities), so a target's full competition is summarized the
 same way on training and test: the pair's stage-1 score over the sum for all candidate entities of the target, their
 number, the best competitor's score, raw name token-set agreement (legal forms and dotted letters kept) and how many
-candidates share it. As blend inputs these raise cross-validated F0.5 from 0.99167 to 0.99261.
+candidates share it. As blend inputs these raise cross-validated F0.5 from 0.99167 to 0.99261 (0.99264 with all 29
+cross-encoders in the final build).
 
 **Composition rescoring** (`scripts/compose.py --extra`): ambiguous pairs (0.01 <= p < 0.99) are rescored with
 features of the entity's confident matches (counts per source, records without an address, noise-kind counts, how
@@ -164,6 +165,13 @@ labels:
   filler such as "services", not a typo or abbreviation). In training, same-address swaps to a common word are true
   45% of the time, against 96-99% for fillers and garbled typos. France's swaps use exactly the words of its decoys
   a few doors away (club, école, comité, amicale), and decoy placement in training implies about 23% true.
+- *Owners of address-less records* (`scripts/france_noaddr_compose.py`): for records without an address, the France
+  links come from the composition model with target context, trained on the stage-1-only cross-validated scores of
+  US/India (+0.0003 F0.5 on that view for address-less targets); every other France decision is unchanged.
+- *Confident made-up brands* (`scripts/france_brand_add.py`): single made-up brand records at the Source 1 house that
+  the blend scores >= 0.95 on unclaimed targets. A label-free test (an entity's records are spread over Source 2 and
+  Source 3, so a true extra record lands in its missing source about 73% of the time, a decoy 50%) estimates them at
+  about 83% true, against 6% for brands the blend scores below 0.5 and about 0% for common-word swaps.
 
 ## 5. Validation and Error Analysis
 
@@ -215,8 +223,9 @@ links, but the owner is only weakly identifiable: token-set agreement with the o
 against 29% of other same-name entities, and shared noise tokens with the owner's other records for 17% against 8%
 (the generator adds noise per record; row order and ids carry no signal). An owner model
 (`scripts/noaddr_owner.py`: candidate scores renormalized over the target's candidates, raw-name agreement, entity
-composition) is 96% precise at probability 0.9 on held-out ambiguous targets and assigns 3,083 US/India records. On the test set, the largest remaining uncertainty is
-France, where generic names leave the address as the only strong signal.
+composition) is 96% precise at probability 0.9 on held-out ambiguous targets, but once composition rescoring has the
+target context its extra assignments are only about 60% precise, so it is not used in the final submission. On the
+test set, the largest remaining uncertainty is France, where generic names leave the address as the only strong signal.
 
 ## 6. Reproduction and Fair Play
 
