@@ -1,5 +1,7 @@
 # Business entity resolution pipeline
 
+Final Rank ~120
+
 Team Claude's Plan's solution to the Business Entity Resolution Challenge (Amazon ML Challenge 2026): final
 leaderboard score 0.989389 (macro F0.5 per Source 1 entity). `Documentation_template.md` is the methodology document
 submitted to the organizers, and `docs/experiments.md` logs every experiment.
