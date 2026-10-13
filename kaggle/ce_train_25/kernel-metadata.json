@@ -1,5 +1,5 @@
 {
-  "id": "cycl0p5/amzn-ce-train-25",
+  "id": "YOUR_KAGGLE_USERNAME/amzn-ce-train-25",
   "title": "amzn-ce-train-25",
   "code_file": "ce_train.py",
   "language": "python",
@@ -8,8 +8,8 @@
   "enable_gpu": "true",
   "enable_internet": "true",
   "dataset_sources": [
-    "aceofstades/amzn-er-data",
-    "cycl0p5/amzn-er-hard"
+    "YOUR_KAGGLE_USERNAME/amzn-er-data",
+    "YOUR_KAGGLE_USERNAME/amzn-er-hard"
   ],
   "competition_sources": [],
   "kernel_sources": []

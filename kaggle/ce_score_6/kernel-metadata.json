@@ -1,5 +1,5 @@
 {
-  "id": "hrishitachavan/amzn-ce-score-6",
+  "id": "YOUR_KAGGLE_USERNAME/amzn-ce-score-6",
   "title": "amzn-ce-score-6",
   "code_file": "ce_score.py",
   "language": "python",
@@ -7,7 +7,7 @@
   "is_private": "true",
   "enable_gpu": "true",
   "enable_internet": "false",
-  "dataset_sources": ["aceofstades/amzn-er-data"],
+  "dataset_sources": ["YOUR_KAGGLE_USERNAME/amzn-er-data"],
   "competition_sources": [],
-  "kernel_sources": ["hrishitachavan/amzn-ce-train-6"]
+  "kernel_sources": ["YOUR_KAGGLE_USERNAME/amzn-ce-train-6"]
 }

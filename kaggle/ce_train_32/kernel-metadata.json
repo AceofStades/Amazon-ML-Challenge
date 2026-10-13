@@ -1,5 +1,5 @@
 {
-  "id": "pravinbokade/amzn-ce-train-32",
+  "id": "YOUR_KAGGLE_USERNAME/amzn-ce-train-32",
   "title": "amzn-ce-train-32",
   "code_file": "ce_train.py",
   "language": "python",
@@ -8,7 +8,7 @@
   "enable_gpu": "true",
   "enable_internet": "true",
   "dataset_sources": [
-    "aceofstades/amzn-er-data"
+    "YOUR_KAGGLE_USERNAME/amzn-er-data"
   ],
   "competition_sources": [],
   "kernel_sources": []

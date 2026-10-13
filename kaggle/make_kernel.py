@@ -31,10 +31,10 @@ assert model in s and pairs_file in s and "torch.float32" in s
 p.write_text(s)
 m = json.loads((train / "kernel-metadata.json").read_text())
 m.update(id=f"{user}/amzn-ce-train-{n}", title=f"amzn-ce-train-{n}",
-         dataset_sources=["aceofstades/amzn-er-data", f"{user}/amzn-er-hard"])
+         dataset_sources=[f"{user}/amzn-er-data", f"{user}/amzn-er-hard"])
 (train / "kernel-metadata.json").write_text(json.dumps(m, indent=2))
 m = json.loads((score / "kernel-metadata.json").read_text())
 m.update(id=f"{user}/amzn-ce-score-{n}", title=f"amzn-ce-score-{n}", kernel_sources=[f"{user}/amzn-ce-train-{n}"],
-         dataset_sources=["aceofstades/amzn-er-data"])
+         dataset_sources=[f"{user}/amzn-er-data"])
 (score / "kernel-metadata.json").write_text(json.dumps(m, indent=2))
 print(f"kernel {n}: {user} {model} {pairs_file} budget {budget}h")

@@ -1,28 +1,28 @@
 # config_dir (relative to $HOME, or default = ~/.kaggle)	training kernel	scoring kernel dir (kaggle/)	cache name (cache/ce_NAME)	model and training pairs
-default	aceofstades/amzn-ce-train-7	ce_score_7	xlmr7	XLM-R large, hard pairs seed 61
-.kaggle/rid	rekishu/amzn-ce-train-3	ce_score_3	large3	e5-large, kNN pairs seed 31
-.config/kaggle/tiya	hrishitachavan/amzn-ce-train-4	ce_score_4	bge	bge-reranker-v2-m3, kNN pairs seed 0
-.config/kaggle/sid	siddharthbokade/amzn-ce-train-9	ce_score_9	bgem3	bge-m3, hard pairs seed 91
-.config/kaggle/vj	cycl0p5/amzn-ce-train-10	ce_score_10	large10	e5-large, hard pairs seed 101 (version 2)
-.config/kaggle/umed	umedindulkar/amzn-ce-train-12	ce_score_12	xlmr12	XLM-R large, hard pairs seed 121
-.config/kaggle/ansh	ayj2411/amzn-ce-train-14	ce_score_14	labse14	LaBSE, hard pairs seed 151
-.config/kaggle/dave	adityadavjekar/amzn-ce-train-16	ce_score_16	large16	e5-large, hard pairs seed 171
-.kaggle/rid	rekishu/amzn-ce-train-21	ce_score_21	bnd21	e5-large, boundary pairs (0.02 <= p1 < 0.98)
-.config/kaggle/tiya	hrishitachavan/amzn-ce-train-22	ce_score_22	bndbge22	bge-reranker-v2-m3, boundary pairs
-.config/kaggle/sid	siddharthbokade/amzn-ce-train-23	ce_score_23	e5i23	e5-large-instruct, hard pairs seed 81
-.config/kaggle/umed	umedindulkar/amzn-ce-train-24	ce_score_24	e5i24	e5-large-instruct, hard pairs seed 131
-.config/kaggle/vj	cycl0p5/amzn-ce-train-25	ce_score_25	bge25	bge-reranker-v2-m3, hard pairs seed 111
-.config/kaggle/ansh	ayj2411/amzn-ce-train-26	ce_score_26	bgem3_26	bge-m3, hard pairs seed 161
-.config/kaggle/dave	adityadavjekar/amzn-ce-train-27	ce_score_27	bge27	bge-reranker-v2-m3, hard pairs seed 181
-.config/kaggle/dad	pravinbokade/amzn-ce-train-31	ce_score_31	xlmr31	XLM-R large, kNN pairs seed 21 (7 h)
-.config/kaggle/dad	pravinbokade/amzn-ce-train-32	ce_score_32	bge32	bge-reranker-v2-m3, kNN pairs seed 31 (5 h)
-.config/kaggle/mom	dipikabokade123/amzn-ce-train-33	ce_score_33	e5i33	e5-large-instruct, kNN pairs seed 31 (7 h)
-.config/kaggle/mom	dipikabokade123/amzn-ce-train-34	ce_score_34	bgem3_34	bge-m3, kNN pairs seed 21 (5 h)
-.config/kaggle/t1	octopus25/amzn-ce-train-35	ce_score_35	large35	e5-large, kNN pairs (base export) (7 h)
-.config/kaggle/t1	octopus25/amzn-ce-train-36	ce_score_36	xlmr36	XLM-R large, kNN pairs seed 31 (5 h)
-.config/kaggle/yash	techno0/amzn-ce-train-37	ce_score_37	bge37	bge-reranker-v2-m3, kNN pairs (base export) (5 h)
-.config/kaggle/yash	techno0/amzn-ce-train-38	ce_score_38	e5i38	e5-large-instruct, kNN pairs seed 21 (5 h)
-.config/kaggle/vishal	vishalbarai/amzn-ce-train-39	ce_score_39	xlmr39	XLM-R large, kNN pairs (base export) (4.5 h)
-.config/kaggle/vishal	vishalbarai/amzn-ce-train-40	ce_score_40	bgem3_40	bge-m3, kNN pairs seed 31 (4.5 h)
-.config/kaggle/yug	yugchapherkar/amzn-ce-train-41	ce_score_41	e5i41	e5-large-instruct, kNN pairs (base export) (4 h)
-.config/kaggle/yug	yugchapherkar/amzn-ce-train-42	ce_score_42	bgem3_42	bge-m3, kNN pairs (base export) (4 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-7	ce_score_7	xlmr7	XLM-R large, hard pairs seed 61
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-3	ce_score_3	large3	e5-large, kNN pairs seed 31
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-4	ce_score_4	bge	bge-reranker-v2-m3, kNN pairs seed 0
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-9	ce_score_9	bgem3	bge-m3, hard pairs seed 91
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-10	ce_score_10	large10	e5-large, hard pairs seed 101 (version 2)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-12	ce_score_12	xlmr12	XLM-R large, hard pairs seed 121
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-14	ce_score_14	labse14	LaBSE, hard pairs seed 151
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-16	ce_score_16	large16	e5-large, hard pairs seed 171
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-21	ce_score_21	bnd21	e5-large, boundary pairs (0.02 <= p1 < 0.98)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-22	ce_score_22	bndbge22	bge-reranker-v2-m3, boundary pairs
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-23	ce_score_23	e5i23	e5-large-instruct, hard pairs seed 81
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-24	ce_score_24	e5i24	e5-large-instruct, hard pairs seed 131
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-25	ce_score_25	bge25	bge-reranker-v2-m3, hard pairs seed 111
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-26	ce_score_26	bgem3_26	bge-m3, hard pairs seed 161
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-27	ce_score_27	bge27	bge-reranker-v2-m3, hard pairs seed 181
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-31	ce_score_31	xlmr31	XLM-R large, kNN pairs seed 21 (7 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-32	ce_score_32	bge32	bge-reranker-v2-m3, kNN pairs seed 31 (5 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-33	ce_score_33	e5i33	e5-large-instruct, kNN pairs seed 31 (7 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-34	ce_score_34	bgem3_34	bge-m3, kNN pairs seed 21 (5 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-35	ce_score_35	large35	e5-large, kNN pairs (base export) (7 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-36	ce_score_36	xlmr36	XLM-R large, kNN pairs seed 31 (5 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-37	ce_score_37	bge37	bge-reranker-v2-m3, kNN pairs (base export) (5 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-38	ce_score_38	e5i38	e5-large-instruct, kNN pairs seed 21 (5 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-39	ce_score_39	xlmr39	XLM-R large, kNN pairs (base export) (4.5 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-40	ce_score_40	bgem3_40	bge-m3, kNN pairs seed 31 (4.5 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-41	ce_score_41	e5i41	e5-large-instruct, kNN pairs (base export) (4 h)
+default	YOUR_KAGGLE_USERNAME/amzn-ce-train-42	ce_score_42	bgem3_42	bge-m3, kNN pairs (base export) (4 h)

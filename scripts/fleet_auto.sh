@@ -1,6 +1,6 @@
 #!/bin/sh
 # Re-run the fleet blend each time another cross-encoder score set lands (logs/fleet_autoN.log, output/sub_autoN).
-cd ~/code/amzn
+cd "$(dirname "$0")/.." || exit 1
 listing() { ls cache/ce_*/test_scores.parquet 2>/dev/null | sort | tr "\n" " "; }
 seen=$(listing)
 n=1

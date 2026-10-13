@@ -1,5 +1,5 @@
 {
-  "id": "adityadavjekar/amzn-ce-train-16",
+  "id": "YOUR_KAGGLE_USERNAME/amzn-ce-train-16",
   "title": "amzn-ce-train-16",
   "code_file": "ce_train.py",
   "language": "python",
@@ -8,8 +8,8 @@
   "enable_gpu": "true",
   "enable_internet": "true",
   "dataset_sources": [
-    "aceofstades/amzn-er-data",
-    "adityadavjekar/amzn-er-hard"
+    "YOUR_KAGGLE_USERNAME/amzn-er-data",
+    "YOUR_KAGGLE_USERNAME/amzn-er-hard"
   ],
   "competition_sources": [],
   "kernel_sources": []

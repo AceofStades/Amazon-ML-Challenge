@@ -1,5 +1,5 @@
 {
-  "id": "cycl0p5/amzn-ce-score-11",
+  "id": "YOUR_KAGGLE_USERNAME/amzn-ce-score-11",
   "title": "amzn-ce-score-11",
   "code_file": "ce_score.py",
   "language": "python",
@@ -8,10 +8,10 @@
   "enable_gpu": "true",
   "enable_internet": "false",
   "dataset_sources": [
-    "aceofstades/amzn-er-data"
+    "YOUR_KAGGLE_USERNAME/amzn-er-data"
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "cycl0p5/amzn-ce-train-11"
+    "YOUR_KAGGLE_USERNAME/amzn-ce-train-11"
   ]
 }

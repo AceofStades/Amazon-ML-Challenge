@@ -346,10 +346,10 @@ submission: calibrated France + recall rule + drop of non-typo France conflicts 
 
 ## More cross-encoders
 
-Six Kaggle GPU sessions (three accounts, two each) plus hades:
-aceofstades L2 (e5-large, seed 21) and XLM-R large on hard pairs (seed 61); rekishu e5-large (seed 31) and
-e5-large on hard pairs (seed 41); hrishitachavan bge-reranker-v2-m3 (Apache-2.0) on kNN pairs and on hard pairs
-(seed 51); hades e5-base (kNN pairs, done) and e5-base on hard pairs (seed 71). Hard pairs are the stage-1
+Six Kaggle GPU sessions plus the local GPU:
+L2 (e5-large, seed 21) and XLM-R large on hard pairs (seed 61); e5-large (seed 31) and
+e5-large on hard pairs (seed 41); bge-reranker-v2-m3 (Apache-2.0) on kNN pairs and on hard pairs
+(seed 51); local e5-base (kNN pairs, done) and e5-base on hard pairs (seed 71). Hard pairs are the stage-1
 candidates with p1 >= 0.01 of 600k entities outside the blend buckets, plus two kNN neighbours and all true
 matches (2.83M pairs, 73% positive): the region where the blend uses cross-encoder scores.
 
@@ -357,7 +357,6 @@ matches (2.83M pairs, 73% positive): the region where the blend uses cross-encod
 
 Holdout F0.5 (in candidates): blend_v7_fullL 0.99160; + e5-base (fullLB) 0.99174; + gen features (genLB) 0.99186.
 File 7 = genLB for US/India + file-6 France rules (US -5.0k/+1.8k pairs, India -3.0k/+2.4k vs file 6).
-cyclop5 Kaggle account: kernels ran with 0 GPUs and no internet (phone verification missing).
 
 ## Leaderboard: France rules and gen blend
 
@@ -388,13 +387,11 @@ are mostly exact names and domains/acronyms at the Source 1 house, so no precisi
 the same address: 0.0895 per entity against 0.034-0.038 in US/India test and 0.0385 in training (77% true),
 about 33% true in France and inseparable. A no-address calibration segment changes nothing material.
 
-## Kaggle GPU quota plan (2026-09-27 02:20)
+## Kaggle GPU budget (2026-09-27 02:20)
 
-The weekly quota is 30 GPU-hours per account and a 2x T4 session counts twice. Two concurrent 7.5-hour runs would
-use the whole week with nothing left for scoring, so every second run was deleted and re-pushed with a 3.75-hour
-budget (kernels 21-27; rekishu and tiya train boundary specialists on stage-1 pairs with 0.02 <= p1 < 0.98).
-Per account: first run about 15.6, deleted run about 1.5, two scorings about 3.4, second run about 8.1 GPU-hours.
-The user account keeps only the XLM-R scoring (about 10 GPU-hours were left).
+A 2x T4 session counts twice against the Kaggle GPU quota. Two concurrent 7.5-hour runs would leave nothing for
+scoring, so every second run was deleted and re-pushed with a 3.75-hour budget (kernels 21-27; two of them train
+boundary specialists on stage-1 pairs with 0.02 <= p1 < 0.98).
 
 ## Cross-validated blend comparison (10 folds over 220k entities)
 
@@ -473,8 +470,7 @@ of composition requires otherwise identical fleet variants.
 
 The scheduled noon build checks readiness from 11:00 IST and waits until all
 fleet and remaining local score files are readable, with a 12:00 IST cutoff for
-drafting with available results. No submission occurs automatically. The current
-session runs directly on hades, as confirmed by the host name.
+drafting with available results. No submission occurs automatically.
 
 Seven small readiness tests cover complete files, missing train/test files,
 partial parquet files, local models, comments, malformed configuration, and a

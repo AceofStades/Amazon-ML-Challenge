@@ -1,6 +1,8 @@
 # Business entity resolution pipeline
 
-> Picking up this work? Read [HANDOFF.md](HANDOFF.md) first: goal, running jobs, Kaggle fleet, plan and open leads.
+Team Claude's Plan's solution to the Business Entity Resolution Challenge (Amazon ML Challenge 2026): final
+leaderboard score 0.989389 (macro F0.5 per Source 1 entity). `Documentation_template.md` is the methodology document
+submitted to the organizers, and `docs/experiments.md` logs every experiment.
 
 Links every Source 1 test record to zero or more Source 2/Source 3 records using only the supplied challenge TSVs.
 No external identity data, geocoder or lookup service is used. Pretrained weights (all MIT or Apache-2.0, at most
@@ -10,8 +12,9 @@ No external identity data, geocoder or lookup service is used. Pretrained weight
 (Apache-2.0) for the matchers.
 
 Requirements: Python 3.12 with uv, an NVIDIA GPU (16 GB is enough), about 32 GB RAM and 150 GB of disk.
-Place the TSVs under `dataset/train/` and `dataset/test/` with their original names and run everything from this
-directory. `dataset/`, `cache/`, `models/`, `logs/` and `output/` are ignored by Git.
+The challenge data is not included in this repository. Place the TSVs under `dataset/train/` and `dataset/test/`
+with their original names and run everything from this directory. `dataset/`, `cache/`, `models/`, `logs/` and
+`output/` are ignored by Git.
 
 ## Reproduce
 
@@ -65,6 +68,8 @@ uv run python -m amzn.kaggle_export
 uv run python -m amzn.kaggle_export --skip-texts --hard-from output/v7 --seed 41 --pairs-name ce_train_pairs_hard_seed41.parquet
 # kaggle/ce_train_N trains one model (e5-large, e5-large-instruct, bge-reranker-v2-m3, bge-m3 or xlm-roberta-large)
 # and kaggle/ce_score_N scores it; scripts/fleet_blend.sh lists the score directories it looks for.
+# Before pushing, replace YOUR_KAGGLE_USERNAME in kaggle/*/kernel-metadata.json and kaggle/fleet.tsv with your
+# Kaggle username and upload the exported files (kaggle/data/) as the datasets the kernel metadata lists.
 # Local extra cross-encoders: multilingual-e5-base on neighbour pairs and on hard pairs.
 ./scripts/run_ce_base.sh
 ./scripts/run_ce_base_hard.sh
@@ -115,14 +120,6 @@ uv run python src/utils_validate_submission.py --matching output/matching_result
 `output/matching_results.tsv` is the leaderboard upload. `output/candidate_pairs.tsv` lists exactly the pairs the
 final matcher scored. `docs/experiments.md` records every holdout and leaderboard result.
 
-## Processed data (private Kaggle dataset)
-
-[aceofstades/amzn-er-processed](https://www.kaggle.com/datasets/aceofstades/amzn-er-processed) holds the processed
-artifacts: normalized records, every candidate pair with its features (137M train, 108M test pairs), stage-1,
-cross-encoder and blend scores, and row-to-ID maps. It is private; ask the owner for collaborator access, then run
-`kaggle datasets download aceofstades/amzn-er-processed`, or attach it as input to a Kaggle notebook. The dataset's
-README explains the file names and the `si`/`ti` row conventions.
-
 ## Method in brief
 
 - **Normalization**: case folding, a learned dictionary that maps Devanagari, Bengali, Tamil, Telugu, Kannada,
@@ -159,3 +156,8 @@ README explains the file names and the `si`/`ti` row conventions.
   positives per entity are kept and extra test pairs count as negatives; the corrected posterior replaces the raw
   score before decoding (`amzn.calibrate`). `amzn.estimate` samples labels from these posteriors to rank candidate
   submissions without test labels.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The challenge data belongs to the organizers and is not
+covered by this license.

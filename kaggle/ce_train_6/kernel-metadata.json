@@ -1,5 +1,5 @@
 {
-  "id": "hrishitachavan/amzn-ce-train-6",
+  "id": "YOUR_KAGGLE_USERNAME/amzn-ce-train-6",
   "title": "amzn-ce-train-6",
   "code_file": "ce_train.py",
   "language": "python",
@@ -7,7 +7,7 @@
   "is_private": "true",
   "enable_gpu": "true",
   "enable_internet": "true",
-  "dataset_sources": ["aceofstades/amzn-er-data", "hrishitachavan/amzn-er-hard"],
+  "dataset_sources": ["YOUR_KAGGLE_USERNAME/amzn-er-data", "YOUR_KAGGLE_USERNAME/amzn-er-hard"],
   "competition_sources": [],
   "kernel_sources": []
 }

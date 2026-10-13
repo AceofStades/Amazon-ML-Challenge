@@ -1,5 +1,5 @@
 {
-  "id": "umedindulkar/amzn-ce-score-24",
+  "id": "YOUR_KAGGLE_USERNAME/amzn-ce-score-24",
   "title": "amzn-ce-score-24",
   "code_file": "ce_score.py",
   "language": "python",
@@ -8,10 +8,10 @@
   "enable_gpu": "true",
   "enable_internet": "false",
   "dataset_sources": [
-    "aceofstades/amzn-er-data"
+    "YOUR_KAGGLE_USERNAME/amzn-er-data"
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "umedindulkar/amzn-ce-train-24"
+    "YOUR_KAGGLE_USERNAME/amzn-ce-train-24"
   ]
 }
